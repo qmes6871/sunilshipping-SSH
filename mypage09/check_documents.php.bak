@@ -1,0 +1,89 @@
+<?php
+/**
+ * 업로드된 문서 확인 스크립트
+ * 인코딩: UTF-8
+ */
+session_start();
+header('Content-Type: text/html; charset=utf-8');
+
+require_once 'config.php';
+
+echo "<!DOCTYPE html><html><head><meta charset='utf-8'><title>문서 확인</title>";
+echo "<style>body{font-family:Arial;margin:20px;} table{border-collapse:collapse;width:100%;} td,th{border:1px solid #ddd;padding:8px;}</style>";
+echo "</head><body>";
+
+echo "<h2>업로드된 문서 확인</h2>";
+
+// 세션 정보
+echo "<h3>1. 세션 정보</h3>";
+if (isset($_SESSION['username'])) {
+    echo "<p>로그인 사용자: <strong>" . htmlspecialchars($_SESSION['username']) . "</strong></p>";
+    $customer_id = $_SESSION['username'];
+} else {
+    echo "<p style='color:red;'>로그인되지 않음</p>";
+    $customer_id = null;
+}
+
+// 전체 문서 조회
+echo "<h3>2. 전체 업로드된 문서</h3>";
+try {
+    if ($pdo) {
+        $stmt = $pdo->query("SELECT * FROM customer_documents ORDER BY upload_date DESC");
+        $all_docs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        echo "<p>총 문서 수: <strong>" . count($all_docs) . "</strong>건</p>";
+
+        if (!empty($all_docs)) {
+            echo "<table>";
+            echo "<tr><th>ID</th><th>고객ID</th><th>파일명</th><th>원본명</th><th>크기</th><th>업로드일</th></tr>";
+            foreach ($all_docs as $doc) {
+                echo "<tr>";
+                echo "<td>{$doc['doc_id']}</td>";
+                echo "<td>" . htmlspecialchars($doc['customer_id']) . "</td>";
+                echo "<td>" . htmlspecialchars($doc['file_name']) . "</td>";
+                echo "<td>" . htmlspecialchars($doc['original_name']) . "</td>";
+                echo "<td>" . number_format($doc['file_size']) . " bytes</td>";
+                echo "<td>{$doc['upload_date']}</td>";
+                echo "</tr>";
+            }
+            echo "</table>";
+        }
+    }
+} catch (PDOException $e) {
+    echo "<p style='color:red;'>오류: " . htmlspecialchars($e->getMessage()) . "</p>";
+}
+
+// 현재 사용자 문서
+if ($customer_id) {
+    echo "<h3>3. 현재 사용자(" . htmlspecialchars($customer_id) . ")의 문서</h3>";
+    try {
+        $stmt = $pdo->prepare("SELECT * FROM customer_documents WHERE customer_id = ? ORDER BY upload_date DESC");
+        $stmt->execute([$customer_id]);
+        $user_docs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        echo "<p>문서 수: <strong>" . count($user_docs) . "</strong>건</p>";
+
+        if (!empty($user_docs)) {
+            echo "<table>";
+            echo "<tr><th>ID</th><th>파일명</th><th>원본명</th><th>크기</th><th>업로드일</th></tr>";
+            foreach ($user_docs as $doc) {
+                echo "<tr>";
+                echo "<td>{$doc['doc_id']}</td>";
+                echo "<td>" . htmlspecialchars($doc['file_name']) . "</td>";
+                echo "<td>" . htmlspecialchars($doc['original_name']) . "</td>";
+                echo "<td>" . number_format($doc['file_size']) . " bytes</td>";
+                echo "<td>{$doc['upload_date']}</td>";
+                echo "</tr>";
+            }
+            echo "</table>";
+        } else {
+            echo "<p style='color:orange;'>이 사용자의 문서가 없습니다.</p>";
+        }
+    } catch (PDOException $e) {
+        echo "<p style='color:red;'>오류: " . htmlspecialchars($e->getMessage()) . "</p>";
+    }
+}
+
+echo "<br><br><a href='index.php#document-upload'>← 메인 페이지로 돌아가기</a>";
+echo "</body></html>";
+?>

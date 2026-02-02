@@ -1,0 +1,424 @@
+<?php
+/**
+ * HOT ITEM 모듈
+ * 인기 상품을 표시하고 구매 기능을 제공
+ */
+
+require_once 'config.php';
+
+/**
+ * HOT ITEM 상품 목록 조회
+ */
+function getHotItems($limit = 6) {
+    global $pdo;
+    $limit = max(1, (int)$limit);
+    try {
+        if (!$pdo) return [];
+
+        $stmt = $pdo->prepare("
+            SELECT id, title, product_name, category, description, content,
+                   original_price, sale_price, image_path,
+                   image_path_1, image_path_2, image_path_3, image_path_4,
+                   badge_type, icon, gradient, is_active,
+                   special_notes, contact_phone, whatsapp,
+                   upload_date, deadline, created_at
+            FROM hot_items
+            WHERE is_active = 1
+            ORDER BY created_at DESC
+            LIMIT {$limit}
+        ");
+        $stmt->execute();
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (PDOException $e) {
+        error_log("HOT ITEM 조회 오류: " . $e->getMessage());
+        return [];
+    }
+}
+
+/**
+ * 특정 HOT ITEM 상품 조회
+ */
+function getHotItem($item_id) {
+    global $pdo;
+    try {
+        if (!$pdo) return null;
+
+        $stmt = $pdo->prepare("
+            SELECT * FROM hot_items
+            WHERE id = ? AND is_active = 1
+        ");
+        $stmt->execute([$item_id]);
+        return $stmt->fetch(PDO::FETCH_ASSOC);
+    } catch (PDOException $e) {
+        error_log("HOT ITEM 상세 조회 오류: " . $e->getMessage());
+        return null;
+    }
+}
+
+/**
+ * HOT ITEM 상품의 할인율 계산
+ */
+function getDiscountRate($original_price, $sale_price) {
+    if ($original_price <= 0 || $sale_price >= $original_price) {
+        return 0;
+    }
+    return round((($original_price - $sale_price) / $original_price) * 100);
+}
+
+/**
+ * HOT ITEM 뱃지 타입에 따른 CSS 클래스 반환
+ */
+function getBadgeClass($badge_type) {
+    $classes = [
+        'hot' => 'badge-hot',
+        'new' => 'badge-new',
+        'sale' => 'badge-sale',
+        'best' => 'badge-best',
+        'limited' => 'badge-limited'
+    ];
+    return $classes[strtolower($badge_type)] ?? 'badge-default';
+}
+
+/**
+ * HOT ITEM 섹션 HTML 생성
+ */
+function displayHotItemSection($limit = 6) {
+    $items = getHotItems($limit);
+
+    if (empty($items)) {
+        return '<div class="no-items">등록된 HOT ITEM이 없습니다.</div>';
+    }
+
+    ob_start();
+    ?>
+    <!-- HOT ITEM 섹션 -->
+    <section class="hotitem-section" style="background: white; padding: 2rem; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin: 2rem 0; border: 1px solid #e5e7eb;">
+        <div style="max-width: 1200px; margin: 0 auto;">
+            <!-- 섹션 헤더 -->
+            <div style="margin-bottom: 2rem; padding-bottom: 1rem; border-bottom: 2px solid #2563eb; text-align: center;">
+                <h2 style="color: #2563eb; font-size: 2rem; font-weight: 700; margin-bottom: 0.5rem; display: flex; align-items: center; justify-content: center; gap: 1rem;">
+                    <i class="fas fa-fire" style="color: #f59e0b;"></i>
+                    HOT ITEM
+                    <span style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: white; padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.8rem; font-weight: 600;">
+                        인기상품
+                    </span>
+                </h2>
+                <p style="color: #6b7280; font-size: 1.1rem; margin: 0;">고객님을 위한 특별 할인 상품</p>
+            </div>
+
+            <!-- 상품 그리드 -->
+            <div class="hotitem-grid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem;">
+                <?php foreach ($items as $item): ?>
+                    <?php
+                    $discount_rate = getDiscountRate($item['original_price'], $item['sale_price']);
+                    $badge_class = getBadgeClass($item['badge_type']);
+                    // 사용 가능한 첫 번째 이미지 선택
+                    $display_image = $item['image_path'] ?? $item['image_path_1'] ?? $item['image_path_2'] ?? $item['image_path_3'] ?? $item['image_path_4'] ?? null;
+                    // 상품명 선택 (product_name이 있으면 우선, 없으면 title)
+                    $display_title = !empty($item['product_name']) ? $item['product_name'] : $item['title'];
+                    ?>
+                    <div class="hotitem-card" style="background: white; border: 1px solid #e5e7eb; border-radius: 12px; overflow: hidden; transition: transform 0.2s, box-shadow 0.2s; cursor: pointer;">
+                        <!-- 상품 이미지 -->
+                        <div class="hotitem-image" style="height: 200px; background: #f8fafc; display: flex; align-items: center; justify-content: center; overflow: hidden;">
+                            <?php if (!empty($display_image)): ?>
+                                <img src="<?= htmlspecialchars($display_image) ?>"
+                                     alt="<?= htmlspecialchars($display_title) ?>"
+                                     style="width: 100%; height: 100%; object-fit: cover;">
+                            <?php else: ?>
+                                <div style="color: #9ca3af; font-size: 3rem;">
+                                    <i class="fas fa-box"></i>
+                                </div>
+                            <?php endif; ?>
+                        </div>
+
+                        <!-- 상품 정보 -->
+                        <div class="hotitem-content" style="padding: 1.5rem;">
+                            <!-- 카테고리 -->
+                            <?php if (!empty($item['category'])): ?>
+                                <div style="color: #6b7280; font-size: 0.8rem; margin-bottom: 0.5rem;">
+                                    <?= htmlspecialchars($item['category']) ?>
+                                </div>
+                            <?php endif; ?>
+
+                            <!-- 뱃지 -->
+                            <?php if (!empty($item['badge_type'])): ?>
+                                <div class="badge <?= $badge_class ?>" style="display: inline-block; padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.7rem; font-weight: 600; color: white; margin-bottom: 0.75rem;">
+                                    <?php if ($item['badge_type'] === 'hot'): ?>
+                                        🔥 HOT
+                                    <?php elseif ($item['badge_type'] === 'new'): ?>
+                                        🆕 NEW
+                                    <?php elseif ($item['badge_type'] === 'sale'): ?>
+                                        💰 SALE
+                                    <?php elseif ($item['badge_type'] === 'best'): ?>
+                                        ⭐ BEST
+                                    <?php elseif ($item['badge_type'] === 'limited'): ?>
+                                        ⏰ LIMITED
+                                    <?php else: ?>
+                                        <?= strtoupper($item['badge_type']) ?>
+                                    <?php endif; ?>
+                                </div>
+                            <?php endif; ?>
+
+                            <!-- 상품명 -->
+                            <h3 style="color: #1f2937; font-size: 1.1rem; font-weight: 600; margin-bottom: 0.75rem; line-height: 1.4;">
+                                <?= htmlspecialchars($display_title) ?>
+                            </h3>
+
+                            <!-- 상품 설명 -->
+                            <?php
+                            $description = !empty($item['content']) ? $item['content'] : (!empty($item['description']) ? $item['description'] : '');
+                            ?>
+                            <?php if (!empty($description)): ?>
+                                <p style="color: #6b7280; font-size: 0.9rem; line-height: 1.5; margin-bottom: 1rem;">
+                                    <?= htmlspecialchars(substr($description, 0, 60)) ?><?= strlen($description) > 60 ? '...' : '' ?>
+                                </p>
+                            <?php endif; ?>
+
+                            <!-- 가격 정보 -->
+                            <div class="price-section" style="margin-bottom: 1rem;">
+                                <?php if ($item['original_price'] > $item['sale_price']): ?>
+                                    <div style="text-decoration: line-through; color: #9ca3af; font-size: 0.9rem; margin-bottom: 0.25rem;">
+                                        정가: $<?= number_format($item['original_price']) ?>
+                                    </div>
+                                <?php endif; ?>
+
+                                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                    <span style="color: #dc2626; font-size: 1.5rem; font-weight: 700;">
+                                        $<?= number_format($item['sale_price']) ?>
+                                    </span>
+                                    <?php if ($discount_rate > 0): ?>
+                                        <span style="background: #dc2626; color: white; padding: 0.25rem 0.5rem; border-radius: 12px; font-size: 0.7rem; font-weight: 600;">
+                                            <?= $discount_rate ?>% OFF
+                                        </span>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+
+                            <!-- 액션 버튼 -->
+                            <div style="display: flex; gap: 0.5rem;">
+                                <a href="../tradecar/inquiry.php?item_id=<?= $item['id'] ?>"
+                                   style="flex: 1; padding: 0.75rem 1rem; background: #2563eb; color: white; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 0.9rem; text-align: center; transition: background 0.2s;">
+                                    <i class="fas fa-shopping-cart"></i> 구매하기
+                                </a>
+                                <a href="../tradecar/inquiry.php?item_id=<?= $item['id'] ?>"
+                                   style="padding: 0.75rem 1rem; background: #6b7280; color: white; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 0.9rem; transition: background 0.2s;">
+                                    <i class="fas fa-question-circle"></i> 문의
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+
+            <!-- 더보기 버튼 -->
+            <div style="text-align: center; margin-top: 2rem;">
+                <a href="../tradecar/index.php"
+                   style="padding: 0.75rem 2rem; background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: white; text-decoration: none; border-radius: 25px; font-weight: 600; font-size: 1rem; transition: transform 0.2s, box-shadow 0.2s; display: inline-block;">
+                    <i class="fas fa-eye"></i> View all trade cars
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <style>
+        /* HOT ITEM 카드 호버 효과 */
+        .hotitem-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+        }
+
+        /* 뱃지 스타일 */
+        .badge-hot {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        }
+        .badge-new {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+        }
+        .badge-sale {
+            background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+        }
+        .badge-best {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .badge-limited {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        }
+        .badge-default {
+            background: #6b7280;
+        }
+
+        /* 반응형 */
+        @media (max-width: 768px) {
+            .hotitem-grid {
+                grid-template-columns: 1fr !important;
+                gap: 1rem;
+            }
+
+            .hotitem-section {
+                padding: 1.5rem !important;
+                margin: 1rem 0 !important;
+            }
+
+            .hotitem-content {
+                padding: 1rem !important;
+            }
+
+            .main-title-section h1 {
+                font-size: 1.5rem !important;
+            }
+        }
+    </style>
+    <?php
+    return ob_get_clean();
+}
+
+/**
+ * HOT ITEM 통계 정보 조회
+ */
+function getHotItemStats() {
+    global $pdo;
+    try {
+        if (!$pdo) return ['total' => 0, 'active' => 0, 'categories' => 0];
+
+        $stmt = $pdo->query("SELECT COUNT(*) as total FROM hot_items");
+        $total = $stmt->fetchColumn();
+
+        $stmt = $pdo->query("SELECT COUNT(*) as active FROM hot_items WHERE is_active = 1");
+        $active = $stmt->fetchColumn();
+
+        $stmt = $pdo->query("SELECT COUNT(DISTINCT category) as categories FROM hot_items WHERE category IS NOT NULL AND category != ''");
+        $categories = $stmt->fetchColumn();
+
+        return [
+            'total' => $total,
+            'active' => $active,
+            'categories' => $categories
+        ];
+    } catch (PDOException $e) {
+        error_log("HOT ITEM 통계 조회 오류: " . $e->getMessage());
+        return ['total' => 0, 'active' => 0, 'categories' => 0];
+    }
+}
+
+/**
+ * 인기 상품 추천 (구매 많은 순)
+ */
+function getPopularHotItems($limit = 4) {
+    global $pdo;
+    $limit = max(1, (int)$limit);
+    try {
+        if (!$pdo) return [];
+
+        // 구매 통계가 있는 테이블이 있다면 조회, 없으면 최신 상품 반환
+        $stmt = $pdo->prepare("
+            SELECT h.*, COALESCE(p.purchase_count, 0) as purchase_count
+            FROM hot_items h
+            LEFT JOIN (
+                SELECT item_id, COUNT(*) as purchase_count
+                FROM hotitem_purchases
+                GROUP BY item_id
+            ) p ON h.id = p.item_id
+            WHERE h.is_active = 1
+            ORDER BY COALESCE(p.purchase_count, 0) DESC, h.created_at DESC
+            LIMIT {$limit}
+        ");
+        $stmt->execute();
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (PDOException $e) {
+        error_log("인기 HOT ITEM 조회 오류: " . $e->getMessage());
+        return [];
+    }
+}
+
+/**
+ * 마이페이지용 HOT ITEM 섹션 (간단 버전)
+ */
+function displayHotItemSectionSimple($limit = 3) {
+    $items = getHotItems($limit);
+    $stats = getHotItemStats();
+
+    ob_start();
+    ?>
+    <!-- HOT ITEM 간단 섹션 -->
+    <div class="hotitem-simple-section" style="background: white; padding: 1.5rem; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin: 1rem 0; border: 1px solid #e5e7eb;">
+        <div style="margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 2px solid #f59e0b;">
+            <h3 style="color: #1f2937; font-size: 1.2rem; font-weight: 600; margin: 0; display: flex; align-items: center; gap: 0.5rem;">
+                <i class="fas fa-fire" style="color: #f59e0b;"></i>
+                TRADE CAR
+                <span style="background: #f59e0b; color: white; padding: 0.25rem 0.5rem; border-radius: 12px; font-size: 0.7rem; margin-left: auto;">
+                    <?= $stats['active'] ?>개 상품
+                </span>
+            </h3>
+        </div>
+
+        <?php if (empty($items)): ?>
+            <!-- 데이터 없을 때 메시지 -->
+            <div style="text-align: center; padding: 2rem; background: #f9fafb; border-radius: 8px; color: #6b7280;">
+                <i class="fas fa-fire" style="font-size: 3rem; margin-bottom: 1rem; opacity: 0.3; color: #f59e0b;"></i>
+                <h4 style="margin-bottom: 0.5rem; color: #374151;">HOT ITEM이 없습니다</h4>
+                <p style="margin: 0; font-size: 0.9rem;">곧 인기 상품이 등록될 예정입니다.</p>
+            </div>
+        <?php else: ?>
+            <div class="hotitem-simple-grid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem;">
+                <?php foreach ($items as $item): ?>
+                    <?php
+                    $discount_rate = getDiscountRate($item['original_price'], $item['sale_price']);
+                    $display_image = $item['image_path'] ?? $item['image_path_1'] ?? $item['image_path_2'] ?? $item['image_path_3'] ?? $item['image_path_4'] ?? null;
+                    $display_title = !empty($item['product_name']) ? $item['product_name'] : $item['title'];
+                    ?>
+                    <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 1rem; transition: transform 0.2s;">
+                        <div style="text-align: center;">
+                            <?php if (!empty($display_image)): ?>
+                                <img src="<?= htmlspecialchars($display_image) ?>"
+                                     alt="<?= htmlspecialchars($display_title) ?>"
+                                     style="width: 80px; height: 80px; object-fit: cover; border-radius: 8px; margin-bottom: 0.75rem;">
+                            <?php else: ?>
+                                <div style="width: 80px; height: 80px; background: #e5e7eb; border-radius: 8px; margin: 0 auto 0.75rem; display: flex; align-items: center; justify-content: center; color: #9ca3af;">
+                                    <i class="fas fa-box"></i>
+                                </div>
+                            <?php endif; ?>
+
+                            <h4 style="color: #1f2937; font-size: 0.9rem; font-weight: 600; margin-bottom: 0.5rem;">
+                                <?= htmlspecialchars($display_title) ?>
+                            </h4>
+
+                            <div style="color: #dc2626; font-weight: 600; font-size: 1.1rem; margin-bottom: 0.25rem;">
+                                $<?= number_format($item['sale_price']) ?>
+                            </div>
+
+                            <?php if ($discount_rate > 0): ?>
+                                <div style="color: #059669; font-size: 0.8rem; font-weight: 500;">
+                                    <?= $discount_rate ?>% 할인
+                                </div>
+                            <?php endif; ?>
+
+                            <a href="../tradecar/inquiry.php?item_id=<?= $item['id'] ?>"
+                               style="display: inline-block; padding: 0.5rem 1rem; background: #2563eb; color: white; text-decoration: none; border-radius: 4px; font-size: 0.8rem; font-weight: 500; margin-top: 0.5rem; transition: background 0.2s;">
+                                구매하기
+                            </a>
+                        </div>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+
+            <div style="text-align: center; margin-top: 1rem;">
+                <a href="../tradecar/index.php"
+                   style="color: #2563eb; text-decoration: none; font-weight: 500; font-size: 0.9rem;">
+                    <i class="fas fa-arrow-right"></i> View all trade cars
+                </a>
+            </div>
+        <?php endif; ?>
+    </div>
+
+    <style>
+        /* HOT ITEM 간단 버전 모바일 반응형 */
+        @media (max-width: 768px) {
+            .hotitem-simple-grid {
+                grid-template-columns: 1fr !important;
+            }
+        }
+    </style>
+    <?php
+    return ob_get_clean();
+}
+?>

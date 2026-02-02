@@ -1,0 +1,74 @@
+ 1. CSS 파일                                                                                                    
+                                                                                                                 
+  경로: /var/www/bus/css/styles.css                                                                              
+                                                                                                                 
+  수정 영역:                                                                                                     
+  - .mega-menu-banner - padding 제거 (padding: 0 1rem 1rem → padding: 0)                                         
+  - .mega-menu-banner-content 관련 스타일 → .mega-menu-banner-image 스타일로 교체                                
+  - .mega-menu-left 너비 조정 (로고 너비와 동일하게 맞춤)                                                        
+    - 기본: 280px → 250px                                                                                        
+    - 1024px 이상: 320px → 250px                                                                                 
+    - 1200px 이상: 350px (유지)                                                                                  
+                                                                                                                 
+  ---                                                                                                            
+  2. HTML 파일 (20개)                                                                                            
+                                                                                                                 
+  수정 영역: PC 메가메뉴 내 .mega-menu-banner 영역                                                               
+                                                                                                                 
+  변경 전:                                                                                                       
+  <div class="mega-menu-banner">                                                                                 
+    <div class="mega-menu-banner-content">                                                                       
+      <span class="banner-arrow">                                                                                
+        <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">                                     
+          <path d="M12 4l-1.41 1.41L16.17 11H4v2h12.17l-5.58 5.59L12 20l8-8z"/>                                  
+        </svg>                                                                                                   
+      </span>                                                                                                    
+      <p class="banner-text-small">안전하고 편리하게 !</p>                                                       
+      <p class="banner-text-large">경산시교통정보센터</p>                                                        
+    </div>                                                                                                       
+    <img src="images/mega-menu-banner.png" alt="메가메뉴 배너" onerror="this.style.display='none'">              
+  </div>                                                                                                         
+                                                                                                                 
+  변경 후:                                                                                                       
+  <div class="mega-menu-banner">                                                                                 
+    <img src="images/ks_menu-4-72.jpg" alt="경산시교통정보센터" class="mega-menu-banner-image">                  
+  </div>                                                                                                         
+  ※ 하위 폴더 파일은 src="../images/ks_menu-4-72.jpg"                                                            
+                                                                                                                 
+  ---                                                                                                            
+  3. 수정된 HTML 파일 경로                                                                                       
+                                                                                                                 
+  루트 (이미지 경로: images/ks_menu-4-72.jpg)                                                                    
+  /var/www/bus/index.html                                                                                        
+                                                                                                                 
+  bus 폴더 (이미지 경로: ../images/ks_menu-4-72.jpg)                                                             
+  /var/www/bus/bus/search.html                                                                                   
+  /var/www/bus/bus/lowfloor.html                                                                                 
+  /var/www/bus/bus/schedule.html                                                                                 
+  /var/www/bus/bus/fare.html                                                                                     
+  /var/www/bus/bus/stops.html                                                                                    
+  /var/www/bus/bus/company.html                                                                                  
+  /var/www/bus/bus/transfer.html                                                                                 
+                                                                                                                 
+  support 폴더 (이미지 경로: ../images/ks_menu-4-72.jpg)                                                         
+  /var/www/bus/support/notice.html                                                                               
+  /var/www/bus/support/sitemap.html                                                                              
+  /var/www/bus/support/privacy.html                                                                              
+                                                                                                                 
+  traffic 폴더 (이미지 경로: ../images/ks_menu-4-72.jpg)                                                         
+  /var/www/bus/traffic/parking.html                                                                              
+  /var/www/bus/traffic/vms.html                                                                                  
+  /var/www/bus/traffic/incident.html                                                                             
+  /var/www/bus/traffic/cctv.html                                                                                 
+  /var/www/bus/traffic/statistics.html                                                                           
+                                                                                                                 
+  center 폴더 (이미지 경로: ../images/ks_menu-4-72.jpg)                                                          
+  /var/www/bus/center/location.html                                                                              
+  /var/www/bus/center/intro.html                                                                                 
+  /var/www/bus/center/its.html                                                                                   
+  /var/www/bus/center/bis.html                                                                                   
+                                                                                                                 
+  ---                                                                                                            
+  4. 추가된 이미지 파일                                                                                          
+                                                                                                                 
+  경로: /var/www/bus/images/ks_menu-4-72.jpg    

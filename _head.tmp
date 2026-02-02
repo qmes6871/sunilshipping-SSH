@@ -1,0 +1,200 @@
+<?php
+/**
+ * FCM ?¸ì‹œ ?Œë¦¼ ?„ì†¡ ?¤í¬ë¦½íŠ¸
+ * Firebase Cloud Messaging v1 API ?¬ìš©
+ */
+
+// ?°ì´?°ë² ?´ìŠ¤ ?¤ì •
+define('G5_MYSQL_HOST', 'localhost');
+define('G5_MYSQL_USER', 'sunilshipping');
+define('G5_MYSQL_PASSWORD', 'sunil123!');
+define('G5_MYSQL_DB', 'sunilshipping');
+
+// DB ?°ê²°
+$conn = mysqli_connect(G5_MYSQL_HOST, G5_MYSQL_USER, G5_MYSQL_PASSWORD, G5_MYSQL_DB);
+if (!$conn) {
+    die('?°ì´?°ë² ?´ìŠ¤ ?°ê²° ?¤íŒ¨: ' . mysqli_connect_error());
+}
+mysqli_set_charset($conn, 'utf8');
+
+/**
+ * Firebase Access Token ?ì„±
+ */
+function getFirebaseAccessToken() {
+    $serviceAccountPath = __DIR__ . '/../../includes/firebase-service-account.json';
+
+    if (!file_exists($serviceAccountPath)) {
+        return ['success' => false, 'error' => 'Firebase Service Account ?Œì¼??ì°¾ì„ ???†ìŠµ?ˆë‹¤.'];
+    }
+
+    $serviceAccount = json_decode(file_get_contents($serviceAccountPath), true);
+
+    if (!$serviceAccount) {
+        return ['success' => false, 'error' => 'Firebase Service Account ?Œì¼???½ì„ ???†ìŠµ?ˆë‹¤.'];
+    }
+
+    // JWT ?ì„±
+    $now = time();
+    $header = [
+        'alg' => 'RS256',
+        'typ' => 'JWT'
+    ];
+
+    $claimSet = [
+        'iss' => $serviceAccount['client_email'],
+        'scope' => 'https://www.googleapis.com/auth/firebase.messaging',
+        'aud' => 'https://oauth2.googleapis.com/token',
+        'exp' => $now + 3600,
+        'iat' => $now
+    ];
+
+    $base64UrlHeader = str_replace(['+', '/', '='], ['-', '_', ''], base64_encode(json_encode($header)));
+    $base64UrlClaimSet = str_replace(['+', '/', '='], ['-', '_', ''], base64_encode(json_encode($claimSet)));
+
+    $signatureInput = $base64UrlHeader . '.' . $base64UrlClaimSet;
+
+    // ê°œì¸?¤ë¡œ ?œëª…
+    $privateKey = openssl_pkey_get_private($serviceAccount['private_key']);
+    openssl_sign($signatureInput, $signature, $privateKey, OPENSSL_ALGO_SHA256);
+    openssl_free_key($privateKey);
+
+    $base64UrlSignature = str_replace(['+', '/', '='], ['-', '_', ''], base64_encode($signature));
+    $jwt = $signatureInput . '.' . $base64UrlSignature;
+
+    // Access Token ?”ì²­
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, 'https://oauth2.googleapis.com/token');
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/x-www-form-urlencoded']);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query([
+        'grant_type' => 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+        'assertion' => $jwt
+    ]));
+
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($httpCode !== 200) {
+        return ['success' => false, 'error' => 'Access Token ?ì„± ?¤íŒ¨: ' . $response];
+    }
+
+    $tokenData = json_decode($response, true);
+
+    if (!isset($tokenData['access_token'])) {
+        return ['success' => false, 'error' => 'Access Token??ë°›ì„ ???†ìŠµ?ˆë‹¤.'];
+    }
+
+    return ['success' => true, 'token' => $tokenData['access_token']];
+}
+
+/**
+ * FCM ?¸ì‹œ ?Œë¦¼ ?„ì†¡
+ */
+function sendFCMNotification($fcmToken, $title, $message, $accessToken, $projectId) {
+    $url = "https://fcm.googleapis.com/v1/projects/{$projectId}/messages:send";
+
+    $payload = [
+        'message' => [
+            'token' => $fcmToken,
+            'notification' => [
+                'title' => $title,
+                'body' => $message
+            ],
+            'data' => [
+                'title' => $title,
+                'message' => $message,
+                'timestamp' => date('Y-m-d H:i:s'),
+                'click_action' => 'FLUTTER_NOTIFICATION_CLICK'
+            ],
+            'android' => [
+                'priority' => 'high',
+                'notification' => [
+                    'sound' => 'default',
+                    'channel_id' => 'high_importance_channel'
+                ]
+            ],
+            'apns' => [
+                'payload' => [
+                    'aps' => [
+                        'sound' => 'default',
+                        'badge' => 1
+                    ]
+                ]
+            ]
+        ]
+    ];
+
+    $headers = [
+        'Authorization: Bearer ' . $accessToken,
+        'Content-Type: application/json'
+    ];
+
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, $url);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
+
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    return [
+        'success' => ($httpCode === 200),
+        'code' => $httpCode,
+        'response' => $response
+    ];
+}
+
+// ?Œë¦¼ ë©”ì‹œì§€ ?¤ì • (POST ?ëŠ” ê¸°ë³¸ê°?
+$title = isset($_POST['title']) ? $_POST['title'] : 'HOT ITEM';
+$body = isset($_POST['body']) ? $_POST['body'] : '?ˆë¡œ??HOT ITEM???±ë¡?˜ì—ˆ?µë‹ˆ??';
+
+echo "<h2>FCM ?¸ì‹œ ?Œë¦¼ ?„ì†¡</h2>";
+echo "<p><strong>?œëª©:</strong> " . htmlspecialchars($title) . "</p>";
+echo "<p><strong>ë©”ì‹œì§€:</strong> " . htmlspecialchars($body) . "</p>";
+echo "<hr>";
+
+// fcm_tokens ?Œì´ë¸”ì—??FCM ? í° ê°€?¸ì˜¤ê¸?$sql = "SELECT id, user_id, fcm_token, device_type
+        FROM fcm_tokens
+        WHERE fcm_token IS NOT NULL
+        AND fcm_token != ''";
+
+$result = mysqli_query($conn, $sql);
+
+if (!$result) {
+    die('ì¿¼ë¦¬ ?¤í–‰ ?¤ë¥˜: ' . mysqli_error($conn));
+}
+
+$tokens = [];
+while ($row = mysqli_fetch_assoc($result)) {
+    $tokens[] = $row;
+}
+
+if (empty($tokens)) {
+    die('?±ë¡??FCM ? í°???†ìŠµ?ˆë‹¤. <a href="register_fcm_token.php">FCM ? í° ?±ë¡ ?˜ì´ì§€</a>?ì„œ ? í°???±ë¡?˜ì„¸??');
+}
+
+echo "<p>ì´?<strong>" . count($tokens) . "ëª?/strong>?ê²Œ ?¸ì‹œ ?Œë¦¼???„ì†¡?©ë‹ˆ??</p><br>";
+
+// Firebase Access Token ê°€?¸ì˜¤ê¸?$tokenResult = getFirebaseAccessToken();
+
+if (!$tokenResult['success']) {
+    die('Firebase Access Token ?ì„± ?¤íŒ¨: ' . $tokenResult['error']);
+}
+
+$accessToken = $tokenResult['token'];
+$projectId = 'suniltotal-507da'; // Firebase ?„ë¡œ?íŠ¸ ID
+
+echo "<h3>?„ì†¡ ê²°ê³¼:</h3>";
+echo "<table border='1' cellpadding='5' cellspacing='0' style='border-collapse: collapse; width: 100%;'>";
+echo "<tr style='background-color: #f0f0f0;'>";
+echo "<th>ë²ˆí˜¸</th><th>User ID</th><th>Device Type</th><th>FCM ? í°</th><th>ê²°ê³¼</th>";
+echo "</tr>";
+
+$successCount = 0;
+$failCount = 0;

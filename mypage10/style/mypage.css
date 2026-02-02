@@ -1,0 +1,44 @@
+/* Header and navigation styles for My Page (mobile + desktop) */
+* { box-sizing: border-box; }
+body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans KR', sans-serif; }
+
+
+
+@media (max-width: 768px) {
+  .nav-menu { display: none; }
+  .nav-actions { display: none; }
+  .mobile-menu-toggle { display: flex; }
+}
+
+/* Document upload section */
+.document-upload-section { margin-top: 30px; }
+.document-upload-section .section-header h2 { margin: 0 0 6px; font-size: 1.3rem; color: #1f2937; }
+.document-upload-section .section-header p { margin: 0 0 12px; color: #6b7280; }
+.document-upload-section .upload-form-container { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; box-shadow: 0 1px 2px rgba(0,0,0,.04); margin-bottom: 18px; }
+.document-upload-section .form-group { display: flex; flex-direction: column; margin-bottom: 14px; }
+.document-upload-section .form-group label { font-weight: 600; color: #374151; margin-bottom: 6px; }
+.document-upload-section input[type="file"],
+.document-upload-section select,
+.document-upload-section input[type="text"],
+.document-upload-section input[type="number"] { padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: .95rem; }
+.document-upload-section input:focus,
+.document-upload-section select:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.12); }
+.document-upload-section .btn { padding: 10px 14px; border-radius: 8px; border: 1px solid #d1d5db; background: #fff; color: #374151; text-decoration: none; cursor: pointer; font-weight: 500; }
+.document-upload-section .btn-primary { background: #2563eb; color: #fff; border-color: #2563eb; }
+.document-upload-section .btn-secondary { background: #6b7280; color: #fff; border-color: #6b7280; }
+.document-upload-section .btn:hover { opacity: .95; }
+
+.uploaded-documents-container { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
+.uploaded-documents-container .table-container { overflow-x: auto; }
+.uploaded-documents-container table { width: 100%; border-collapse: collapse; }
+.uploaded-documents-container th, .uploaded-documents-container td { padding: 12px 14px; border-bottom: 1px solid #f3f4f6; text-align: left; }
+.uploaded-documents-container th { background: #f9fafb; color: #374151; font-weight: 700; font-size: .85rem; text-transform: uppercase; letter-spacing: .03em; }
+.uploaded-documents-container .btn-sm { padding: 6px 10px; border-radius: 6px; font-size: .8rem; text-decoration: none; display: inline-block; }
+
+/* Customer info section (generic) */
+.customer-info-section { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 18px; box-shadow: 0 1px 2px rgba(0,0,0,.04); margin: 18px 0; }
+.customer-info-section .section-title { margin: 0 0 10px; font-size: 1.2rem; color: #1f2937; }
+.customer-info-section .info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px,1fr)); gap: 12px; }
+.customer-info-section .info-item { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; }
+.customer-info-section .label { color: #6b7280; font-size: .85rem; margin-bottom: 4px; }
+.customer-info-section .value { color: #111827; font-weight: 600; }

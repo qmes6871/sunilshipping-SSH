@@ -1,0 +1,407 @@
+<?php
+/**
+ * 트래킹 리포트 - 전체 배송 현황 요약
+ * customer_tracking_module.php 스타일 참고
+ */
+session_start();
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+
+// DB 설정
+define('G5_MYSQL_HOST', 'localhost');
+define('G5_MYSQL_USER', 'sunilshipping');
+define('G5_MYSQL_PASSWORD', 'sunil123!');
+define('G5_MYSQL_DB', 'sunilshipping');
+
+// PDO 연결
+function getDbConnection() {
+    try {
+        return new PDO(
+            "mysql:host=" . G5_MYSQL_HOST . ";dbname=" . G5_MYSQL_DB . ";charset=utf8mb4",
+            G5_MYSQL_USER,
+            G5_MYSQL_PASSWORD,
+            [
+                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC
+            ]
+        );
+    } catch (PDOException $e) {
+        exit("DB Connection Failed: " . $e->getMessage());
+    }
+}
+
+// 로그인한 고객 정보 조회
+function getLoggedInCustomer($pdo) {
+    $username = $_SESSION['ss_mb_id'] ?? $_SESSION['username'] ?? null;
+
+    if (!$username) {
+        return null;
+    }
+
+    $sql = "SELECT korean_name, customer_type
+            FROM customer_management
+            WHERE username = :username
+              AND status = 'active'
+            LIMIT 1";
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute([':username' => $username]);
+    return $stmt->fetch();
+}
+
+// Turkey/Syria 추적 데이터 조회
+function getTurkeySyriaTracking($pdo, $koreanName, $cntrNo = null) {
+    if ($cntrNo) {
+        $query = "SELECT * FROM turkiye_syria_tracking
+                  WHERE CNTR_NO LIKE :cntr_no";
+        $stmt = $pdo->prepare($query);
+        $stmt->execute([':cntr_no' => '%' . $cntrNo . '%']);
+    } else {
+        $query = "SELECT * FROM turkiye_syria_tracking
+                  WHERE shipper = :korean_name";
+        $stmt = $pdo->prepare($query);
+        $stmt->execute([':korean_name' => $koreanName]);
+    }
+    return $stmt->fetchAll();
+}
+
+// World Wide 추적 데이터 조회
+function getWorldWideTracking($pdo, $koreanName, $cntrNo = null) {
+    if ($cntrNo) {
+        $query = "SELECT * FROM ww_tracking
+                  WHERE CNTR_NO LIKE :cntr_no";
+        $stmt = $pdo->prepare($query);
+        $stmt->execute([':cntr_no' => '%' . $cntrNo . '%']);
+    } else {
+        $query = "SELECT * FROM ww_tracking
+                  WHERE shipper = :korean_name";
+        $stmt = $pdo->prepare($query);
+        $stmt->execute([':korean_name' => $koreanName]);
+    }
+    return $stmt->fetchAll();
+}
+
+// TCR 추적 데이터 조회
+function getTcrTracking($pdo, $koreanName, $cntrNo = null) {
+    if ($cntrNo) {
+        $query = "SELECT * FROM tcr_tracking
+                  WHERE CNTR_NO LIKE :cntr_no";
+        $stmt = $pdo->prepare($query);
+        $stmt->execute([':cntr_no' => '%' . $cntrNo . '%']);
+    } else {
+        $query = "SELECT * FROM tcr_tracking
+                  WHERE shipper = :korean_name";
+        $stmt = $pdo->prepare($query);
+        $stmt->execute([':korean_name' => $koreanName]);
+    }
+    return $stmt->fetchAll();
+}
+
+// 테이블별 통계 가져오기
+function getTableStats($pdo, $tableName, $koreanName) {
+    try {
+        // 총 건수만 계산
+        $sql = "SELECT COUNT(*) as total FROM {$tableName} WHERE shipper = :korean_name";
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([':korean_name' => $koreanName]);
+        $total = $stmt->fetchColumn();
+
+        // 나머지는 0으로 반환 (etd 컬럼이 없을 수 있음)
+        return [
+            'total' => $total,
+            'ongoing' => 0,
+            'completed' => 0,
+            'recent' => 0
+        ];
+    } catch (Exception $e) {
+        return ['total' => 0, 'ongoing' => 0, 'completed' => 0, 'recent' => 0];
+    }
+}
+
+// 표 출력 함수 (이미지 변환 기능 포함)
+function printTable($data, $title = '') {
+    if (!$data || empty($data)) return;
+
+    static $tableCount = 0;
+    $tableCount++;
+    $tableId = "table-{$tableCount}";
+
+    if ($title) echo "<h3 style='margin-top:30px;color:#2c3e50;'>{$title}</h3>";
+
+    echo "<div class='table-wrapper' id='wrapper-{$tableId}'>";
+    echo "<button class='convert-btn' onclick='viewAsImage(\"{$tableId}\")' style='background:#3498db;'>이미지 보기</button>";
+    echo "<button class='convert-btn' onclick='downloadAsImage(\"{$tableId}\")' style='background:#27ae60; margin-left:10px;'>이미지 다운로드</button>";
+
+    echo "<div id='{$tableId}' style='overflow-x:auto; background:white; padding:10px;'>";
+    echo "<table border='1' cellspacing='0' cellpadding='8' style='border-collapse:collapse;width:100%;min-width:800px;'>";
+    echo "<thead><tr style='background:#3498db;color:white;'>";
+    foreach (array_keys($data[0]) as $col)
+        echo "<th style='padding:10px;text-align:left;'>" . htmlspecialchars($col) . "</th>";
+    echo "</tr></thead><tbody>";
+
+    $rowCount = 0;
+    foreach ($data as $r) {
+        $bg = ($rowCount % 2 == 0) ? '#f9f9f9' : '#fff';
+        echo "<tr style='background:{$bg};'>";
+        foreach ($r as $v)
+            echo "<td style='padding:8px;border:1px solid #ddd;'>" . htmlspecialchars($v ?? '') . "</td>";
+        echo "</tr>";
+        $rowCount++;
+    }
+    echo "</tbody></table>";
+    echo "</div>";
+
+    echo "<div class='image-result' id='image-{$tableId}'></div>";
+    echo "<p style='color:#7f8c8d;font-size:14px;'>총 {$rowCount}건</p>";
+    echo "</div>";
+}
+
+$pdo = getDbConnection();
+$customer = getLoggedInCustomer($pdo);
+
+// 검색 기능
+$searchQuery = $_GET['search'] ?? '';
+
+echo "<!DOCTYPE html><html lang='ko'><head><meta charset='UTF-8'>";
+echo "<meta name='viewport' content='width=device-width, initial-scale=1.0'>";
+echo "<title>트래킹 리포트 - SUNIL SHIPPING</title>";
+echo "<script src='https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js'></script>";
+echo "<style>
+    body { font-family:Arial, sans-serif; background:#f5f5f5; padding:20px; }
+    .container { max-width:1600px; margin:0 auto; background:#fff; padding:30px; border-radius:8px; box-shadow:0 2px 10px rgba(0,0,0,0.1); }
+    h1 { color:#2c3e50; margin-bottom:10px; }
+    .subtitle { color:#7f8c8d; margin-bottom:30px; }
+    .customer-section { margin-bottom:50px; padding:20px; background:#f8f9fa; border-left:4px solid #3498db; border-radius:5px; }
+    .customer-name { font-size:22px; font-weight:bold; margin-bottom:8px; }
+    .customer-type { display:inline-block; padding:5px 15px; border-radius:20px; font-size:14px; font-weight:600; margin-bottom:15px; color:white;}
+    .type-ww { background:#3498db; }
+    .type-w/w { background:#3498db; }
+    .type-tcr { background:#27ae60; }
+    .type-turkey { background:#e67e22; }
+    .type-turkey_syria { background:#e67e22; }
+    .no-data { padding:20px; text-align:center; color:#95a5a6; font-style:italic; background:#ecf0f1; border-radius:5px; }
+    .back-btn { display:inline-block; padding:10px 20px; background:#95a5a6; color:white; text-decoration:none; border-radius:4px; margin-top:20px; }
+    .back-btn:hover { background:#7f8c8d; }
+    .table-wrapper { margin:20px 0; }
+    .convert-btn { display:inline-block; padding:8px 16px; background:#27ae60; color:white; border:none; border-radius:4px; cursor:pointer; margin:10px 0; }
+    .convert-btn:hover { background:#229954; }
+    .image-result { margin:10px 0; display:none; }
+    .image-result img { max-width:100%; border:1px solid #ddd; border-radius:4px; }
+
+    /* 통계 박스 */
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin-bottom: 40px; }
+    .stat-box { background: white; padding: 25px; border-radius: 8px; border: 2px solid #ecf0f1; transition: all 0.3s; }
+    .stat-box:hover { border-color: #3498db; box-shadow: 0 4px 15px rgba(52, 152, 219, 0.2); }
+    .stat-box.total { border-left: 4px solid #3498db; }
+    .stat-box.ongoing { border-left: 4px solid #f39c12; }
+    .stat-box.completed { border-left: 4px solid #27ae60; }
+    .stat-box.recent { border-left: 4px solid #9b59b6; }
+    .stat-label { font-size: 14px; color: #7f8c8d; margin-bottom: 8px; font-weight: 600; }
+    .stat-number { font-size: 36px; font-weight: bold; color: #2c3e50; margin-bottom: 5px; }
+    .stat-detail { font-size: 12px; color: #95a5a6; }
+</style></head><body><div class='container'>";
+
+echo "<h1>📊 트래킹 리포트</h1>";
+echo "<p class='subtitle'>전체 배송 추적 정보 및 통계</p>";
+
+// 검색 기능
+echo "<div style='margin-bottom:30px;'>";
+echo "<form method='GET' style='display:flex;gap:10px;max-width:600px;'>";
+echo "<input type='text' name='search' placeholder='CNTR NO로 검색 (예: ABCD1234567)' ";
+echo "value='" . htmlspecialchars($searchQuery) . "' ";
+echo "style='flex:1;padding:12px;border:1px solid #ddd;border-radius:4px;font-size:14px;'>";
+echo "<button type='submit' style='padding:12px 24px;background:#3498db;color:white;border:none;border-radius:4px;cursor:pointer;font-size:14px;font-weight:600;'>검색</button>";
+if ($searchQuery) {
+    echo "<a href='?' style='padding:12px 24px;background:#95a5a6;color:white;text-decoration:none;border-radius:4px;font-size:14px;font-weight:600;'>전체보기</a>";
+}
+echo "</form>";
+echo "</div>";
+
+if (!$customer) {
+    echo "<div class='no-data'>로그인이 필요합니다.</div>";
+} else {
+    $type = $customer['customer_type'];
+    $koreanName = $customer['korean_name'];
+
+    echo "<div class='customer-section'>";
+    echo "<div class='customer-name'>{$koreanName}</div>";
+
+    $class = $label = '';
+    switch ($type) {
+        case 'w/w': $class = 'type-ww'; $label = 'World Wide'; break;
+        case 'tcr': $class = 'type-tcr'; $label = 'TCR'; break;
+        case 'turkey_syria': $class = 'type-turkey'; $label = 'Turkey/Syria'; break;
+        default: $class = 'type-ww'; $label = $type;
+    }
+    echo "<span class='customer-type {$class}'>{$label}</span>";
+
+    echo "</div>";
+
+    $hasData = false;
+
+    // 1. Turkey/Syria 테이블에서 검색
+    $rows = getTurkeySyriaTracking($pdo, $koreanName, $searchQuery);
+    if ($rows && count($rows) > 0) {
+        printTable($rows, "🇹🇷 Turkey/Syria 추적 정보");
+        $hasData = true;
+    }
+
+    // 2. World Wide 테이블에서 검색
+    $rows = getWorldWideTracking($pdo, $koreanName, $searchQuery);
+    if ($rows && count($rows) > 0) {
+        printTable($rows, "🌍 World Wide 추적 정보");
+        $hasData = true;
+    }
+
+    // 3. TCR 테이블에서 검색
+    $rows = getTcrTracking($pdo, $koreanName, $searchQuery);
+    if ($rows && count($rows) > 0) {
+        printTable($rows, "🚢 TCR 추적 정보");
+        $hasData = true;
+    }
+
+    if (!$hasData) {
+        if ($searchQuery) {
+            echo "<div class='no-data'>'" . htmlspecialchars($searchQuery) . "'에 대한 검색 결과가 없습니다.</div>";
+        } else {
+            echo "<div class='no-data'>배송 추적 데이터가 없습니다.</div>";
+        }
+    }
+}
+
+echo "<a href='index.php' class='back-btn'>← 마이페이지로 돌아가기</a>";
+echo "</div>";
+
+// JavaScript for converting tables to images
+echo "<script>
+function viewAsImage(tableId) {
+    const element = document.getElementById(tableId);
+    const wrapper = document.getElementById('wrapper-' + tableId);
+    const buttons = wrapper.querySelectorAll('.convert-btn');
+
+    buttons.forEach(btn => {
+        btn.disabled = true;
+        btn.textContent = btn.textContent.replace('이미지 보기', '변환 중...').replace('이미지 다운로드', '변환 중...');
+    });
+
+    // 테이블의 실제 너비 가져오기
+    const table = element.querySelector('table');
+    const actualWidth = table ? table.scrollWidth : element.scrollWidth;
+
+    // 원래 overflow 설정 저장
+    const originalOverflow = element.style.overflow;
+    element.style.overflow = 'visible';
+
+    html2canvas(element, {
+        scale: 2,
+        backgroundColor: '#ffffff',
+        logging: false,
+        useCORS: true,
+        scrollX: 0,
+        scrollY: -window.scrollY,
+        windowWidth: actualWidth,
+        width: actualWidth,
+        onclone: function(clonedDoc) {
+            const clonedElement = clonedDoc.getElementById(tableId);
+            if (clonedElement) {
+                clonedElement.style.overflow = 'visible';
+                clonedElement.style.width = actualWidth + 'px';
+            }
+        }
+    }).then(canvas => {
+        // overflow 원복
+        element.style.overflow = originalOverflow;
+
+        const imageDataUrl = canvas.toDataURL('image/jpeg', 0.95);
+
+        const newWindow = window.open('', '_blank');
+        newWindow.document.write('<!DOCTYPE html><html lang=\"ko\"><head><meta charset=\"UTF-8\">');
+        newWindow.document.write('<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0, user-scalable=yes\">');
+        newWindow.document.write('<title>배송 추적 이미지</title>');
+        newWindow.document.write('<style>');
+        newWindow.document.write('body{margin:0;padding:10px;background:#f5f5f5;overflow:auto;}');
+        newWindow.document.write('img{width:auto;height:auto;display:block;box-shadow:0 2px 10px rgba(0,0,0,0.1);margin:0 auto;}');
+        newWindow.document.write('.info{text-align:center;padding:10px;color:#666;font-size:14px;background:white;margin-bottom:10px;}');
+        newWindow.document.write('</style></head><body>');
+        newWindow.document.write('<div class=\"info\">💡 좌우로 스크롤하거나 확대/축소하여 전체 데이터를 확인하세요</div>');
+        newWindow.document.write('<img src=\"' + imageDataUrl + '\" alt=\"배송 추적 테이블\" />');
+        newWindow.document.write('</body></html>');
+        newWindow.document.close();
+
+        buttons.forEach(btn => {
+            btn.disabled = false;
+            btn.textContent = btn.textContent.replace('변환 중...', '이미지 보기').replace('변환 중...', '이미지 다운로드');
+        });
+    }).catch(err => {
+        element.style.overflow = originalOverflow;
+        console.error('이미지 변환 오류:', err);
+        buttons.forEach(btn => {
+            btn.disabled = false;
+            btn.textContent = btn.textContent.replace('변환 중...', '이미지 보기').replace('변환 중...', '이미지 다운로드');
+        });
+        alert('이미지 변환에 실패했습니다.');
+    });
+}
+
+function downloadAsImage(tableId) {
+    const element = document.getElementById(tableId);
+    const wrapper = document.getElementById('wrapper-' + tableId);
+    const buttons = wrapper.querySelectorAll('.convert-btn');
+
+    buttons.forEach(btn => {
+        btn.disabled = true;
+        const originalText = btn.textContent;
+        btn.setAttribute('data-original-text', originalText);
+        btn.textContent = '변환 중...';
+    });
+
+    // 테이블의 실제 너비 가져오기
+    const table = element.querySelector('table');
+    const actualWidth = table ? table.scrollWidth : element.scrollWidth;
+
+    // 원래 overflow 설정 저장
+    const originalOverflow = element.style.overflow;
+    element.style.overflow = 'visible';
+
+    html2canvas(element, {
+        scale: 2,
+        backgroundColor: '#ffffff',
+        logging: false,
+        useCORS: true,
+        scrollX: 0,
+        scrollY: -window.scrollY,
+        windowWidth: actualWidth,
+        width: actualWidth,
+        onclone: function(clonedDoc) {
+            const clonedElement = clonedDoc.getElementById(tableId);
+            if (clonedElement) {
+                clonedElement.style.overflow = 'visible';
+                clonedElement.style.width = actualWidth + 'px';
+            }
+        }
+    }).then(canvas => {
+        // overflow 원복
+        element.style.overflow = originalOverflow;
+
+        const link = document.createElement('a');
+        link.download = 'tracking-table-' + tableId + '-' + new Date().getTime() + '.jpg';
+        link.href = canvas.toDataURL('image/jpeg', 0.95);
+        link.click();
+
+        buttons.forEach(btn => {
+            btn.disabled = false;
+            btn.textContent = btn.getAttribute('data-original-text');
+        });
+    }).catch(err => {
+        element.style.overflow = originalOverflow;
+        console.error('이미지 다운로드 오류:', err);
+        buttons.forEach(btn => {
+            btn.disabled = false;
+            btn.textContent = btn.getAttribute('data-original-text');
+        });
+        alert('이미지 다운로드에 실패했습니다.');
+    });
+}
+</script>";
+
+echo "</body></html>";
+?>

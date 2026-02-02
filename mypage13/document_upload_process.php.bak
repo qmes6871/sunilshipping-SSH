@@ -1,0 +1,48 @@
+<?php
+session_start();
+require_once 'config.php';
+require_once 'customer_document_upload_module.php';
+
+// 로그인 체크 - username을 customer_id로 사용
+if (!isset($_SESSION['username']) || empty($_SESSION['username'])) {
+    header('Location: ../login/login.php');
+    exit;
+}
+
+$customer_id = $_SESSION['username'];
+
+// POST 요청이 아니면 리다이렉트
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    header('Location: index.php');
+    exit;
+}
+
+// 파일 업로드 처리
+if (isset($_FILES['document_file']) && $_FILES['document_file']['error'] !== UPLOAD_ERR_NO_FILE) {
+    $file = $_FILES['document_file'];
+
+    // 선택적으로 컨테이너 ID, 서류 타입, 메모 받기
+    $ct_id = isset($_POST['ct_id']) ? $_POST['ct_id'] : null;
+    $doc_type = isset($_POST['doc_type']) ? $_POST['doc_type'] : null;
+    $memo = isset($_POST['memo']) ? $_POST['memo'] : null;
+
+    // 업로드 함수 호출 (customer_document_upload_module.php의 함수 사용)
+    $result = uploadCustomerDocument($customer_id, $file, $ct_id, $doc_type, $memo);
+
+    if ($result['success']) {
+        $_SESSION['upload_message'] = $result['message'];
+        $_SESSION['upload_status'] = 'success';
+    } else {
+        $_SESSION['upload_message'] = $result['message'];
+        $_SESSION['upload_status'] = 'error';
+    }
+} else {
+    $_SESSION['upload_message'] = '파일이 선택되지 않았습니다.';
+    $_SESSION['upload_status'] = 'error';
+}
+
+// 서류 목록 페이지로 리다이렉트 (서류 목록을 보여주는 페이지가 필요)
+header('Location: index.php');
+exit;
+
+?>

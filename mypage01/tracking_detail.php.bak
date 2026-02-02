@@ -1,0 +1,360 @@
+<?php
+// 세션 시작 (파일 맨 위에서 실행)
+session_start();
+
+// 오류 표시 활성화 (디버깅용)
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+
+// 데이터베이스 연결
+define('DB_HOST', 'localhost');
+define('DB_USER', 'sunilshipping');
+define('DB_PASSWORD', 'sunil123!');
+define('DB_NAME', 'sunilshipping');
+
+try {
+    $pdo = new PDO(
+        "mysql:host=" . DB_HOST . ";dbname=" . DB_NAME . ";charset=utf8mb4",
+        DB_USER,
+        DB_PASSWORD,
+        [
+            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+        ]
+    );
+} catch (PDOException $e) {
+    die("<h1>데이터베이스 연결 실패</h1><p>" . $e->getMessage() . "</p>");
+}
+
+$ct_id = $_GET['ct_id'] ?? null;
+
+if (!$ct_id) {
+    die("<h1>오류</h1><p>컨테이너 ID가 필요합니다.</p>");
+}
+
+// 세션에서 로그인한 고객 ID 가져오기
+$logged_customer_id = $_SESSION['username'] ?? null;
+
+// 컨테이너 정보 조회 - 고객 ID가 일치하는 경우만
+try {
+    $stmt = $pdo->prepare("SELECT * FROM container_tracking WHERE ct_id = ? AND customer_id = ?");
+    $stmt->execute([$ct_id, $logged_customer_id]);
+    $container = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$container) {
+        die("<h1>오류</h1><p>컨테이너 정보를 찾을 수 없거나 접근 권한이 없습니다.</p>");
+    }
+} catch (PDOException $e) {
+    die("<h1>쿼리 오류</h1><p>" . $e->getMessage() . "</p>");
+}
+
+// 서류 목록 생성 (container_tracking 테이블의 document 필드들 사용)
+$documents = [];
+$doc_fields = [
+    'document_bl' => 'B/L',
+    'document_invoice' => 'Invoice',
+    'document_packing' => 'Packing List',
+    'document_certificate' => 'Certificate',
+    'document_other' => 'Other Documents'
+];
+
+foreach ($doc_fields as $field => $label) {
+    if (!empty($container[$field])) {
+        $documents[] = [
+            'doc_type' => $label,
+            'file_name' => $container[$field],
+            'file_path' => '../uploads/tracing/documents/' . $container[$field],
+            'upload_date' => $container['documents_updated_at'] ?? date('Y-m-d H:i')
+        ];
+    }
+}
+
+// 서류 타입 텍스트 변환
+function getDocumentTypeText($doc_type) {
+    return $doc_type;
+}
+
+// 상태 텍스트 변환
+function getTrackingStatusText($status) {
+    $statusTexts = [
+        'preparing' => '준비중',
+        'active' => '운송중',
+        'shipping' => '운송중',
+        'completed' => '완료',
+        'delayed' => '지연',
+        'cancelled' => '취소'
+    ];
+    return $statusTexts[$status] ?? $status;
+}
+?>
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>컨테이너 상세 정보 - <?= htmlspecialchars($container['cntr_no']) ?></title>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+            background: #fff;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            background: white;
+            padding: 15px;
+            margin-bottom: 20px;
+            border: 1px solid #ddd;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header h1 {
+            font-size: 20px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .back-btn {
+            background: #555;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            font-size: 14px;
+            cursor: pointer;
+            text-decoration: none;
+        }
+
+        .back-btn:hover {
+            background: #333;
+        }
+
+        .section {
+            background: white;
+            padding: 20px;
+            margin-bottom: 20px;
+            border: 1px solid #ddd;
+        }
+
+        .section-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 15px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 15px;
+        }
+
+        .info-item {
+            padding: 12px;
+            background: #f9f9f9;
+            border: 1px solid #e0e0e0;
+        }
+
+        .info-label {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 4px;
+        }
+
+        .info-value {
+            font-size: 15px;
+            font-weight: 500;
+            color: #333;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 10px;
+            font-size: 13px;
+            border: 1px solid #ddd;
+        }
+
+        .status-active { background: #f0f0f0; color: #333; }
+        .status-shipped { background: #f0f0f0; color: #333; }
+        .status-delayed { background: #f0f0f0; color: #333; }
+        .status-preparing { background: #f0f0f0; color: #333; }
+        .status-completed { background: #f0f0f0; color: #333; }
+
+        .doc-list {
+            display: grid;
+            gap: 10px;
+        }
+
+        .doc-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px;
+            background: #f9f9f9;
+            border: 1px solid #e0e0e0;
+        }
+
+        .doc-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex: 1;
+        }
+
+        .doc-type-badge {
+            padding: 4px 10px;
+            font-size: 12px;
+            font-weight: 500;
+            white-space: nowrap;
+            border: 1px solid #ccc;
+            background: #f5f5f5;
+            color: #555;
+        }
+
+        .doc-name {
+            font-size: 14px;
+            font-weight: 500;
+            color: #333;
+        }
+
+        .doc-meta {
+            font-size: 12px;
+            color: #777;
+            margin-top: 3px;
+        }
+
+        .btn-download {
+            padding: 6px 14px;
+            background: #555;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-size: 13px;
+            text-decoration: none;
+        }
+
+        .btn-download:hover {
+            background: #333;
+        }
+
+        .empty-docs {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📦 컨테이너 상세 정보</h1>
+            <a href="index.php" class="back-btn">← 목록으로</a>
+        </div>
+
+        <!-- 컨테이너 정보 -->
+        <div class="section">
+            <h2 class="section-title">기본 정보</h2>
+            <div class="info-grid">
+                <div class="info-item">
+                    <div class="info-label">컨테이너 번호</div>
+                    <div class="info-value" style="font-family: 'Courier New', monospace;">
+                        <?= htmlspecialchars($container['cntr_no'] ?? '-') ?>
+                    </div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">구매자</div>
+                    <div class="info-value"><?= htmlspecialchars($container['buyer'] ?? '-') ?></div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">출발항</div>
+                    <div class="info-value"><?= htmlspecialchars($container['port_1'] ?? '-') ?></div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">도착항</div>
+                    <div class="info-value"><?= htmlspecialchars($container['port_2'] ?? '-') ?></div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">출발 예정일</div>
+                    <div class="info-value"><?= htmlspecialchars($container['etd'] ?? '-') ?></div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">도착 예정일</div>
+                    <div class="info-value"><?= htmlspecialchars($container['eta'] ?? '-') ?></div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">금액</div>
+                    <div class="info-value">$<?= number_format($container['amount'] ?? 0) ?></div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">상태</div>
+                    <div class="info-value">
+                        <span class="status-badge status-<?= $container['status'] ?? 'active' ?>">
+                            <?= getTrackingStatusText($container['status'] ?? 'active') ?>
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 서류 목록 -->
+        <div class="section">
+            <h2 class="section-title">📄 업로드된 서류</h2>
+            <?php if (empty($documents)): ?>
+                <div class="empty-docs">
+                    <div style="font-size: 48px; margin-bottom: 10px;">📭</div>
+                    <p style="font-size: 16px; font-weight: 500;">업로드된 서류가 없습니다.</p>
+                    <p style="font-size: 14px; margin-top: 5px;">관리자에게 서류 업로드를 요청하세요.</p>
+                </div>
+            <?php else: ?>
+                <div class="doc-list">
+                    <?php foreach ($documents as $doc): ?>
+                        <div class="doc-item">
+                            <div class="doc-info">
+                                <span class="doc-type-badge doc-type-<?= $doc['doc_type'] ?>">
+                                    <?= getDocumentTypeText($doc['doc_type']) ?>
+                                </span>
+                                <div>
+                                    <div class="doc-name"><?= htmlspecialchars($doc['file_name']) ?></div>
+                                    <div class="doc-meta">
+                                        업로드: <?= $doc['upload_date'] ?>
+                                    </div>
+                                </div>
+                            </div>
+                            <a href="<?= htmlspecialchars($doc['file_path']) ?>"
+                               class="btn-download"
+                               download>
+                                ⬇ 다운로드
+                            </a>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
+        </div>
+
+        <!-- 디버그 정보 (개발용 - 나중에 제거) -->
+        <div class="section" style="background: #ecf0f1;">
+            <h2 class="section-title" style="border-color: #95a5a6;">디버그 정보</h2>
+            <p><strong>컨테이너 ID:</strong> <?= htmlspecialchars($ct_id) ?></p>
+            <p><strong>서류 개수:</strong> <?= count($documents) ?>개</p>
+            <p><strong>데이터베이스:</strong> 연결됨</p>
+        </div>
+    </div>
+</body>
+</html>

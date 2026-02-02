@@ -1,0 +1,643 @@
+<?php
+/**
+ * 트래킹 모듈 - 수정된 버전
+ */
+
+/**
+ * 데이터베이스 연결 테스트
+ */
+function testDatabaseConnection() {
+    global $pdo;
+    
+    try {
+        if ($pdo) {
+            $stmt = $pdo->query("SELECT COUNT(*) as count FROM container_tracking");
+            $result = $stmt->fetch(PDO::FETCH_ASSOC);
+            return [
+                'success' => true,
+                'message' => 'DB 연결 성공 (' . $result['count'] . '건)'
+            ];
+        } else {
+            return [
+                'success' => false,
+                'message' => 'PDO 객체가 없음'
+            ];
+        }
+    } catch (PDOException $e) {
+        return [
+            'success' => false,
+            'message' => 'DB 오류: ' . $e->getMessage()
+        ];
+    }
+}
+
+/**
+ * 고객별 트래킹 데이터 조회 - 수정된 버전
+ */
+function getCustomerTrackingData($customer_id, $filters = []) {
+    global $pdo;
+    
+    // 일단 데모 데이터를 먼저 반환하도록 (디버깅용)
+    $demoData = getDemoTrackingData();
+    
+    try {
+        if (!$pdo) {
+            error_log("PDO 객체가 없음");
+            return $demoData;
+        }
+
+        // 기본 쿼리
+        $sql = "SELECT
+                    ct_id,
+                    customer_id,
+                    cntr_no,
+                    buyer,
+                    port_1,
+                    DATE_FORMAT(etd, '%Y-%m-%d') as etd,
+                    DATE_FORMAT(eta, '%Y-%m-%d') as eta,
+                    port_2,
+                    amount,
+                    status,
+                    DATE_FORMAT(reg_date, '%Y-%m-%d %H:%i') as reg_date,
+                    DATE_FORMAT(update_date, '%Y-%m-%d %H:%i') as update_date,
+                    DATEDIFF(eta, etd) as transit_days,
+                    unpaid_amount,
+                    unpaid_status,
+                    DATE_FORMAT(payment_date, '%Y-%m-%d') as payment_date,
+                    CASE
+                        WHEN eta < CURDATE() AND status = 'active' THEN 'delayed'
+                        WHEN eta >= CURDATE() AND status = 'active' THEN 'shipping'
+                        WHEN status = 'completed' THEN 'completed'
+                        WHEN status = 'preparing' THEN 'preparing'
+                        WHEN status = 'cancelled' THEN 'cancelled'
+                        ELSE status
+                    END as tracking_status
+                FROM container_tracking
+                WHERE customer_id = :customer_id";
+        
+        $params = ['customer_id' => $customer_id];
+        
+        // 필터 조건 추가
+        if (!empty($filters['cntr_no'])) {
+            $sql .= " AND cntr_no LIKE :cntr_no";
+            $params['cntr_no'] = '%' . $filters['cntr_no'] . '%';
+        }
+        
+        if (!empty($filters['status'])) {
+            $sql .= " AND status = :status";
+            $params['status'] = $filters['status'];
+        }
+        
+        if (!empty($filters['port_1'])) {
+            $sql .= " AND port_1 LIKE :port_1";
+            $params['port_1'] = '%' . $filters['port_1'] . '%';
+        }
+        
+        if (!empty($filters['port_2'])) {
+            $sql .= " AND port_2 LIKE :port_2";
+            $params['port_2'] = '%' . $filters['port_2'] . '%';
+        }
+        
+        $sql .= " ORDER BY reg_date DESC";
+        
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
+        $results = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        // 실제 데이터가 있으면 반환, 없으면 데모 데이터
+        if (!empty($results)) {
+            return $results;
+        } else {
+            // 고객 ID가 실제 사용자인 경우에만 빈 배열, 데모 사용자면 데모 데이터
+            if ($customer_id === 'demo_user' || empty($customer_id)) {
+                return $demoData;
+            } else {
+                return []; // 실제 사용자인데 데이터가 없는 경우
+            }
+        }
+        
+    } catch (PDOException $e) {
+        error_log("트래킹 데이터 조회 오류: " . $e->getMessage());
+        return $demoData;
+    }
+}
+
+/**
+ * 고객별 트래킹 통계 조회 - 수정된 버전
+ */
+function getCustomerTrackingStats($customer_id) {
+    global $pdo;
+
+    // 기본 데모 통계
+    $defaultStats = [
+        'total_containers' => 6,
+        'monthly_new' => 2,
+        'delayed' => 1,
+        'shipping' => 2,
+        'completed' => 2,
+        'preparing' => 1,
+        'total_unpaid' => 0
+    ];
+
+    try {
+        if (!$pdo) {
+            return $defaultStats;
+        }
+
+        $stats = [];
+
+        // 전체 컨테이너 수
+        $stmt = $pdo->prepare("SELECT COUNT(*) as total FROM container_tracking WHERE customer_id = ?");
+        $stmt->execute([$customer_id]);
+        $stats['total_containers'] = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
+
+        // 통계가 0이면 데모 데이터 반환
+        if ($stats['total_containers'] == 0) {
+            return $defaultStats;
+        }
+
+        // 나머지 통계들
+        $stmt = $pdo->prepare("SELECT COUNT(*) as monthly FROM container_tracking WHERE customer_id = ? AND YEAR(reg_date) = YEAR(NOW()) AND MONTH(reg_date) = MONTH(NOW())");
+        $stmt->execute([$customer_id]);
+        $stats['monthly_new'] = $stmt->fetch(PDO::FETCH_ASSOC)['monthly'];
+
+        $stmt = $pdo->prepare("SELECT COUNT(*) as delayed FROM container_tracking WHERE customer_id = ? AND eta < CURDATE() AND status = 'active'");
+        $stmt->execute([$customer_id]);
+        $stats['delayed'] = $stmt->fetch(PDO::FETCH_ASSOC)['delayed'];
+
+        $stmt = $pdo->prepare("SELECT COUNT(*) as shipping FROM container_tracking WHERE customer_id = ? AND status = 'active' AND eta >= CURDATE()");
+        $stmt->execute([$customer_id]);
+        $stats['shipping'] = $stmt->fetch(PDO::FETCH_ASSOC)['shipping'];
+
+        $stmt = $pdo->prepare("SELECT COUNT(*) as completed FROM container_tracking WHERE customer_id = ? AND status = 'completed'");
+        $stmt->execute([$customer_id]);
+        $stats['completed'] = $stmt->fetch(PDO::FETCH_ASSOC)['completed'];
+
+        $stmt = $pdo->prepare("SELECT COUNT(*) as preparing FROM container_tracking WHERE customer_id = ? AND status = 'preparing'");
+        $stmt->execute([$customer_id]);
+        $stats['preparing'] = $stmt->fetch(PDO::FETCH_ASSOC)['preparing'];
+
+        // 미수금액 합계
+        $stmt = $pdo->prepare("SELECT COALESCE(SUM(unpaid_amount), 0) as total_unpaid FROM container_tracking WHERE customer_id = ?");
+        $stmt->execute([$customer_id]);
+        $stats['total_unpaid'] = $stmt->fetch(PDO::FETCH_ASSOC)['total_unpaid'];
+
+        return $stats;
+
+    } catch (PDOException $e) {
+        error_log("트래킹 통계 조회 오류: " . $e->getMessage());
+        return $defaultStats;
+    }
+}
+
+/**
+ * 데모 트래킹 데이터
+ */
+function getDemoTrackingData() {
+    return [
+        [
+            'ct_id' => '1',
+            'customer_id' => 'demo_user',
+            'cntr_no' => 'DEMO1234567',
+            'buyer' => '삼성전자',
+            'port_1' => '부산항',
+            'etd' => '2025-09-28',
+            'eta' => '2025-10-15',
+            'port_2' => '로스앤젤레스항',
+            'amount' => 125000,
+            'status' => 'active',
+            'reg_date' => '2025-09-20 10:30',
+            'update_date' => '2025-09-26 08:45',
+            'transit_days' => 17,
+            'tracking_status' => 'shipping',
+            'unpaid_amount' => 0,
+            'unpaid_status' => 'paid',
+            'payment_date' => '2025-09-20'
+        ],
+        [
+            'ct_id' => '2',
+            'customer_id' => 'demo_user',
+            'cntr_no' => 'DEMO2345678',
+            'buyer' => 'LG전자',
+            'port_1' => '인천항',
+            'etd' => '2025-09-30',
+            'eta' => '2025-10-18',
+            'port_2' => '롱비치항',
+            'amount' => 98500,
+            'status' => 'preparing',
+            'reg_date' => '2025-09-22 14:15',
+            'update_date' => '2025-09-25 16:20',
+            'transit_days' => 18,
+            'tracking_status' => 'preparing',
+            'unpaid_amount' => 0,
+            'unpaid_status' => 'paid',
+            'payment_date' => '2025-09-22'
+        ],
+        [
+            'ct_id' => '3',
+            'customer_id' => 'demo_user',
+            'cntr_no' => 'DEMO3456789',
+            'buyer' => '현대자동차',
+            'port_1' => '울산항',
+            'etd' => '2025-09-15',
+            'eta' => '2025-10-02',
+            'port_2' => '시애틀항',
+            'amount' => 215000,
+            'status' => 'completed',
+            'reg_date' => '2025-09-10 09:20',
+            'update_date' => '2025-10-03 11:30',
+            'transit_days' => 17,
+            'tracking_status' => 'completed',
+            'unpaid_amount' => 0,
+            'unpaid_status' => 'paid',
+            'payment_date' => '2025-09-10'
+        ],
+        [
+            'ct_id' => '4',
+            'customer_id' => 'demo_user',
+            'cntr_no' => 'DEMO4567890',
+            'buyer' => 'SK하이닉스',
+            'port_1' => '광양항',
+            'etd' => '2025-09-10',
+            'eta' => '2025-09-25',
+            'port_2' => '오클랜드항',
+            'amount' => 87300,
+            'status' => 'active',
+            'reg_date' => '2025-09-05 16:45',
+            'update_date' => '2025-09-26 07:15',
+            'transit_days' => 15,
+            'tracking_status' => 'delayed',
+            'unpaid_amount' => 0,
+            'unpaid_status' => 'paid',
+            'payment_date' => '2025-09-05'
+        ],
+        [
+            'ct_id' => '5',
+            'customer_id' => 'demo_user',
+            'cntr_no' => 'DEMO5678901',
+            'buyer' => '포스코',
+            'port_1' => '평택항',
+            'etd' => '2025-10-01',
+            'eta' => '2025-10-20',
+            'port_2' => '뉴욕항',
+            'amount' => 156000,
+            'status' => 'preparing',
+            'reg_date' => '2025-09-24 11:30',
+            'update_date' => '2025-09-26 09:00',
+            'transit_days' => 19,
+            'tracking_status' => 'preparing',
+            'unpaid_amount' => 0,
+            'unpaid_status' => 'paid',
+            'payment_date' => '2025-09-24'
+        ],
+        [
+            'ct_id' => '6',
+            'customer_id' => 'demo_user',
+            'cntr_no' => 'DEMO6789012',
+            'buyer' => '한화시스템',
+            'port_1' => '포항항',
+            'etd' => '2025-09-01',
+            'eta' => '2025-09-18',
+            'port_2' => '휴스턴항',
+            'amount' => 134500,
+            'status' => 'completed',
+            'reg_date' => '2025-08-25 13:20',
+            'update_date' => '2025-09-19 15:45',
+            'transit_days' => 17,
+            'tracking_status' => 'completed',
+            'unpaid_amount' => 0,
+            'unpaid_status' => 'paid',
+            'payment_date' => '2025-08-25'
+        ]
+    ];
+}
+
+/**
+ * 컨테이너별 서류 조회
+ */
+function getContainerDocuments($ct_id) {
+    global $pdo;
+
+    try {
+        if (!$pdo) {
+            return [];
+        }
+
+        $stmt = $pdo->prepare("
+            SELECT
+                doc_id,
+                ct_id,
+                customer_id,
+                doc_type,
+                file_name,
+                file_path,
+                file_size,
+                DATE_FORMAT(upload_date, '%Y-%m-%d %H:%i') as upload_date
+            FROM container_documents
+            WHERE ct_id = ?
+            ORDER BY upload_date DESC
+        ");
+        $stmt->execute([$ct_id]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    } catch (PDOException $e) {
+        error_log("서류 조회 오류: " . $e->getMessage());
+        return [];
+    }
+}
+
+/**
+ * 서류 타입 텍스트 변환
+ */
+function getDocumentTypeText($doc_type) {
+    $docTypes = [
+        'invoice' => '인보이스',
+        'bl' => 'B/L',
+        'export_license' => '면장(수출신고필증)'
+    ];
+
+    return $docTypes[$doc_type] ?? $doc_type;
+}
+
+/**
+ * 상태 텍스트 변환
+ */
+function getTrackingStatusText($status) {
+    $statusTexts = [
+        'preparing' => '준비중',
+        'active' => '운송중',
+        'shipping' => '운송중',
+        'completed' => '완료',
+        'delayed' => '지연',
+        'cancelled' => '취소'
+    ];
+
+    return $statusTexts[$status] ?? $status;
+}
+
+/**
+ * 컨테이너 상세 정보 조회 (서류 포함)
+ */
+function getContainerDetail($ct_id) {
+    global $pdo;
+
+    try {
+        if (!$pdo) {
+            return null;
+        }
+
+        // 컨테이너 기본 정보
+        $stmt = $pdo->prepare("
+            SELECT
+                ct_id,
+                customer_id,
+                cntr_no,
+                buyer,
+                port_1,
+                DATE_FORMAT(etd, '%Y-%m-%d') as etd,
+                DATE_FORMAT(eta, '%Y-%m-%d') as eta,
+                port_2,
+                amount,
+                status,
+                unpaid_amount,
+                unpaid_status,
+                DATE_FORMAT(payment_date, '%Y-%m-%d') as payment_date,
+                DATE_FORMAT(unpaid_occurred_date, '%Y-%m-%d') as unpaid_occurred_date,
+                DATE_FORMAT(unpaid_resolved_date, '%Y-%m-%d') as unpaid_resolved_date,
+                document_bl,
+                document_invoice,
+                document_packing,
+                document_certificate,
+                document_other,
+                DATE_FORMAT(documents_updated_at, '%Y-%m-%d %H:%i') as documents_updated_at,
+                DATE_FORMAT(reg_date, '%Y-%m-%d %H:%i') as reg_date,
+                DATE_FORMAT(update_date, '%Y-%m-%d %H:%i') as update_date
+            FROM container_tracking
+            WHERE ct_id = ?
+        ");
+        $stmt->execute([$ct_id]);
+        $container = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$container) {
+            return null;
+        }
+
+        // 서류 목록 조회
+        $container['documents'] = getContainerDocuments($ct_id);
+
+        return $container;
+
+    } catch (PDOException $e) {
+        error_log("컨테이너 상세 조회 오류: " . $e->getMessage());
+        return null;
+    }
+}
+
+/**
+ * 트래킹 모듈 스타일 출력 (한 번만)
+ */
+function printTrackingModuleStylesOnce() {
+    static $printed = false;
+    if ($printed) return;
+    $printed = true;
+    echo '<style>'
+        .
+        ".tracking-main-module { padding: 30px; }\n"
+        .
+        ".tracking-module .detail-modal { background:#fff; border-radius:8px; max-width:800px; margin:0 auto; }\n"
+        .
+        ".tracking-module .detail-header { padding:20px; border-bottom:2px solid #2563eb; display:flex; justify-content:space-between; align-items:center; }\n"
+        .
+        ".tracking-module .detail-header h3 { margin:0; color:#1f2937; }\n"
+        .
+        ".tracking-module .container-number { font-family:'Courier New', monospace; font-weight:bold; color:#2563eb; font-size:1.1rem; }\n"
+        .
+        ".tracking-module .detail-body { padding:20px; }\n"
+        .
+        ".tracking-module .detail-section { margin-bottom:30px; }\n"
+        .
+        ".tracking-module .detail-section h4 { margin:0 0 15px 0; color:#374151; font-size:1rem; font-weight:600; border-bottom:1px solid #e5e7eb; padding-bottom:8px; }\n"
+        .
+        ".tracking-module .detail-table { width:100%; border-collapse:collapse; }\n"
+        .
+        ".tracking-module .detail-table th, .tracking-module .detail-table td { padding:10px; text-align:left; border-bottom:1px solid #f3f4f6; }\n"
+        .
+        ".tracking-module .detail-table th { font-weight:600; color:#6b7280; width:150px; background:#f9fafb; }\n"
+        .
+        ".tracking-module .detail-table td { color:#1f2937; }\n"
+        .
+        ".tracking-module .document-list { display:flex; flex-direction:column; gap:10px; }\n"
+        .
+        ".tracking-module .document-item { display:flex; align-items:center; gap:15px; padding:12px; background:#f9fafb; border-radius:6px; border:1px solid #e5e7eb; }\n"
+        .
+        ".tracking-module .doc-type { padding:4px 10px; background:#2563eb; color:#fff; border-radius:4px; font-size:.85rem; font-weight:600; min-width:80px; text-align:center; }\n"
+        .
+        ".tracking-module .doc-name { flex:1; color:#374151; font-weight:500; }\n"
+        .
+        ".tracking-module .doc-size, .tracking-module .doc-date { color:#6b7280; font-size:.9rem; }\n"
+        .
+        ".tracking-module .btn-download { padding:6px 12px; background:#10b981; color:#fff; border-radius:4px; text-decoration:none; font-size:.9rem; font-weight:500; transition:all .3s; }\n"
+        .
+        ".tracking-module .btn-download:hover { background:#059669; }\n"
+        .
+        "@media (max-width:768px){ .tracking-module .detail-header { flex-direction:column; align-items:flex-start; gap:10px; } }\n"
+        .
+    '</style>';
+}
+
+/**
+ * 상세 정보 HTML 생성
+ */
+function renderContainerDetailModal($ct_id) {
+    // 스타일을 한 번만 출력
+    printTrackingModuleStylesOnce();
+    $detail = getContainerDetail($ct_id);
+
+    if (!$detail) {
+        return '<div class="alert alert-error">정보를 불러올 수 없습니다.</div>';
+    }
+
+    ob_start();
+    ?>
+    <div class="tracking-module" style="padding: 30px;">
+    <div class="detail-modal">
+        <div class="detail-header">
+            <h3>컨테이너 상세 정보</h3>
+            <span class="container-number"><?= htmlspecialchars($detail['cntr_no']) ?></span>
+        </div>
+
+        <div class="detail-body">
+            <div class="detail-section">
+                <h4>기본 정보</h4>
+                <table class="detail-table">
+                    <tr>
+                        <th>고객 ID</th>
+                        <td><?= htmlspecialchars($detail['customer_id']) ?></td>
+                        <th>구매자</th>
+                        <td><?= htmlspecialchars($detail['buyer']) ?></td>
+                    </tr>
+                    <tr>
+                        <th>출발항</th>
+                        <td><?= htmlspecialchars($detail['port_1']) ?></td>
+                        <th>도착항</th>
+                        <td><?= htmlspecialchars($detail['port_2']) ?></td>
+                    </tr>
+                    <tr>
+                        <th>출발일 (ETD)</th>
+                        <td><?= htmlspecialchars($detail['etd'] ?? '-') ?></td>
+                        <th>도착일 (ETA)</th>
+                        <td><?= htmlspecialchars($detail['eta'] ?? '-') ?></td>
+                    </tr>
+                    <tr>
+                        <th>상태</th>
+                        <td><?= getTrackingStatusText($detail['status']) ?></td>
+                        <th>금액</th>
+                        <td>$<?= number_format($detail['amount']) ?></td>
+                    </tr>
+                </table>
+            </div>
+
+            <div class="detail-section">
+                <h4>결제 정보</h4>
+                <table class="detail-table">
+                    <tr>
+                        <th>미수금액</th>
+                        <td>$<?= number_format($detail['unpaid_amount'] ?? 0) ?></td>
+                        <th>미수상태</th>
+                        <td><?= $detail['unpaid_status'] === 'unpaid' ? '미수' : '완납' ?></td>
+                    </tr>
+                    <tr>
+                        <th>결제완료일</th>
+                        <td><?= htmlspecialchars($detail['payment_date'] ?? '-') ?></td>
+                        <th>미수발생일</th>
+                        <td><?= htmlspecialchars($detail['unpaid_occurred_date'] ?? '-') ?></td>
+                    </tr>
+                    <tr>
+                        <th>미수해결일</th>
+                        <td colspan="3"><?= htmlspecialchars($detail['unpaid_resolved_date'] ?? '-') ?></td>
+                    </tr>
+                </table>
+            </div>
+
+            <div class="detail-section">
+                <h4>서류 정보</h4>
+                <table class="detail-table">
+                    <tr>
+                        <th>B/L 서류</th>
+                        <td><?= htmlspecialchars($detail['document_bl'] ?? '-') ?></td>
+                    </tr>
+                    <tr>
+                        <th>Invoice 서류</th>
+                        <td><?= htmlspecialchars($detail['document_invoice'] ?? '-') ?></td>
+                    </tr>
+                    <tr>
+                        <th>Packing List</th>
+                        <td><?= htmlspecialchars($detail['document_packing'] ?? '-') ?></td>
+                    </tr>
+                    <tr>
+                        <th>Certificate</th>
+                        <td><?= htmlspecialchars($detail['document_certificate'] ?? '-') ?></td>
+                    </tr>
+                    <tr>
+                        <th>기타 서류</th>
+                        <td><?= htmlspecialchars($detail['document_other'] ?? '-') ?></td>
+                    </tr>
+                    <?php if ($detail['documents_updated_at']): ?>
+                    <tr>
+                        <th>서류 업데이트</th>
+                        <td><?= htmlspecialchars($detail['documents_updated_at']) ?></td>
+                    </tr>
+                    <?php endif; ?>
+                </table>
+            </div>
+
+            <?php if (!empty($detail['documents'])): ?>
+            <div class="detail-section">
+                <h4>업로드된 서류</h4>
+                <div class="document-list">
+                    <?php foreach ($detail['documents'] as $doc): ?>
+                    <div class="document-item">
+                        <span class="doc-type"><?= getDocumentTypeText($doc['doc_type']) ?></span>
+                        <span class="doc-name"><?= htmlspecialchars($doc['file_name']) ?></span>
+                        <span class="doc-size"><?= formatFileSize($doc['file_size']) ?></span>
+                        <span class="doc-date"><?= htmlspecialchars($doc['upload_date']) ?></span>
+                        <a href="<?= htmlspecialchars($doc['file_path']) ?>" class="btn-download" download>다운로드</a>
+                    </div>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+            <?php endif; ?>
+
+            <div class="detail-section">
+                <h4>등록 정보</h4>
+                <table class="detail-table">
+                    <tr>
+                        <th>등록일</th>
+                        <td><?= htmlspecialchars($detail['reg_date']) ?></td>
+                        <th>수정일</th>
+                        <td><?= htmlspecialchars($detail['update_date']) ?></td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+    </div>
+    </div>
+    <?php
+    return ob_get_clean();
+}
+
+/**
+ * 파일 크기 포맷팅
+ */
+function formatFileSize($bytes) {
+    if ($bytes >= 1073741824) {
+        return number_format($bytes / 1073741824, 2) . ' GB';
+    } elseif ($bytes >= 1048576) {
+        return number_format($bytes / 1048576, 2) . ' MB';
+    } elseif ($bytes >= 1024) {
+        return number_format($bytes / 1024, 2) . ' KB';
+    } else {
+        return $bytes . ' bytes';
+    }
+}
+?>
