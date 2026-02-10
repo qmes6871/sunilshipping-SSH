@@ -88,9 +88,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $details = ['quantity' => $data['quantity'], 'unit_price' => $data['unit_price'], 'delivery_date' => $data['delivery_date'], 'payment' => $data['payment'], 'shipping' => $data['shipping']];
                 }
 
+                $detailsJson = !empty($details) ? json_encode($details, JSON_UNESCAPED_UNICODE) : null;
+
                 $stmt = $pdo->prepare("INSERT INTO " . CRM_AGRI_ACTIVITIES_TABLE . "
-                    (customer_id, activity_type, activity_date, description, meeting_purpose, content, result, followup, created_by, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())");
+                    (customer_id, activity_type, activity_date, description, meeting_purpose, content, result, followup, details, created_by, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())");
                 $stmt->execute([
                     $data['customer_id'],
                     $data['activity_type'],
@@ -100,6 +102,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $data['content'],
                     $data['result'],
                     $data['followup'],
+                    $detailsJson,
                     $currentUser['crm_user_id']
                 ]);
 

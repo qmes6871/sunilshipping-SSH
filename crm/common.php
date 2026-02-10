@@ -147,17 +147,57 @@ function uploadFile($file, $uploadDir, $allowedTypes = null) {
 
     // 파일 확장자 체크
     $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+    $mimeType = $file['type'] ?? '';
+
     if ($allowedTypes === null) {
         $allowedTypes = array_merge(CRM_ALLOWED_IMAGE_TYPES, CRM_ALLOWED_DOC_TYPES, CRM_ALLOWED_AUDIO_TYPES);
     }
-    if (!in_array($ext, $allowedTypes)) {
+
+    // MIME 타입 배열인 경우 (image/jpeg 형식) 확장자 배열로 변환
+    $isAllowed = false;
+    if (!empty($allowedTypes)) {
+        // MIME 타입인지 확인 (슬래시 포함)
+        if (strpos($allowedTypes[0], '/') !== false) {
+            // MIME 타입으로 체크
+            $isAllowed = in_array($mimeType, $allowedTypes);
+            // 또는 확장자로도 체크 (MIME 타입에서 확장자 추출)
+            if (!$isAllowed) {
+                $mimeToExt = [
+                    'image/jpeg' => ['jpg', 'jpeg'],
+                    'image/png' => ['png'],
+                    'image/gif' => ['gif'],
+                    'image/webp' => ['webp'],
+                    'application/pdf' => ['pdf'],
+                    'audio/mpeg' => ['mp3'],
+                    'audio/wav' => ['wav'],
+                    'audio/mp3' => ['mp3'],
+                    'audio/webm' => ['webm'],
+                    'audio/ogg' => ['ogg'],
+                    'audio/m4a' => ['m4a']
+                ];
+                foreach ($allowedTypes as $mime) {
+                    if (isset($mimeToExt[$mime]) && in_array($ext, $mimeToExt[$mime])) {
+                        $isAllowed = true;
+                        break;
+                    }
+                }
+            }
+        } else {
+            // 확장자로 체크
+            $isAllowed = in_array($ext, $allowedTypes);
+        }
+    } else {
+        $isAllowed = true;
+    }
+
+    if (!$isAllowed) {
         return ['success' => false, 'message' => '허용되지 않는 파일 형식입니다.'];
     }
 
     // 업로드 디렉토리 확인
     $fullUploadDir = CRM_UPLOAD_PATH . '/' . $uploadDir;
     if (!is_dir($fullUploadDir)) {
-        mkdir($fullUploadDir, 0755, true);
+        mkdir($fullUploadDir, 0777, true);
     }
 
     // 파일명 생성 (유니크)
@@ -166,12 +206,16 @@ function uploadFile($file, $uploadDir, $allowedTypes = null) {
 
     // 파일 이동
     if (move_uploaded_file($file['tmp_name'], $uploadPath)) {
+        $filePath = $uploadDir . '/' . $newFileName;
         return [
             'success' => true,
             'file_name' => $file['name'],
+            'original_name' => $file['name'],
             'stored_name' => $newFileName,
-            'file_path' => $uploadDir . '/' . $newFileName,
+            'file_path' => $filePath,
+            'path' => $filePath,
             'file_size' => $file['size'],
+            'size' => $file['size'],
             'file_type' => $file['type']
         ];
     }
@@ -431,4 +475,86 @@ function highlightKeyword($text, $keyword) {
     if (empty($keyword)) return h($text);
     $pattern = '/(' . preg_quote($keyword, '/') . ')/i';
     return preg_replace($pattern, '<mark>$1</mark>', h($text));
+}
+
+/**
+ * 설정값 가져오기
+ */
+function getSetting($key, $default = null) {
+    static $cache = [];
+
+    if (isset($cache[$key])) {
+        return $cache[$key];
+    }
+
+    $pdo = getDB();
+    try {
+        $stmt = $pdo->prepare("SELECT setting_value FROM " . CRM_SETTINGS_TABLE . " WHERE setting_key = ?");
+        $stmt->execute([$key]);
+        $result = $stmt->fetch();
+        $value = $result ? $result['setting_value'] : $default;
+        $cache[$key] = $value;
+        return $value;
+    } catch (Exception $e) {
+        return $default;
+    }
+}
+
+/**
+ * 설정값 저장하기
+ */
+function setSetting($key, $value) {
+    $pdo = getDB();
+    try {
+        $stmt = $pdo->prepare("INSERT INTO " . CRM_SETTINGS_TABLE . " (setting_key, setting_value)
+            VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)");
+        $stmt->execute([$key, $value]);
+        return true;
+    } catch (Exception $e) {
+        return false;
+    }
+}
+
+/**
+ * 국가 목록 가져오기 (국제물류용)
+ */
+function getIntlCountries() {
+    $countries = getSetting('intl_countries');
+    if ($countries) {
+        return json_decode($countries, true) ?: [];
+    }
+
+    // 기본 국가 목록
+    $defaultCountries = [
+        '우즈베키스탄', '카자흐스탄', '키르기스스탄', '타지키스탄', '투르크메니스탄',
+        '리비아', '알제리', '튀니지', '이집트', '모로코',
+        '사우디아라비아', 'UAE', '요르단', '이라크', '쿠웨이트',
+        '러시아', '독일', '프랑스', '영국', '폴란드',
+        '기타'
+    ];
+
+    // 초기 데이터 저장
+    setSetting('intl_countries', json_encode($defaultCountries, JSON_UNESCAPED_UNICODE));
+
+    return $defaultCountries;
+}
+
+/**
+ * 지역 목록 가져오기 (국제물류용 - 실적 차트용)
+ */
+function getIntlRegions() {
+    $regions = getSetting('intl_regions');
+    if ($regions) {
+        return json_decode($regions, true) ?: [];
+    }
+
+    // 기본 지역 목록
+    $defaultRegions = [
+        '쿠잔트', '알마티', '타쉬켄트', '리비아', '알제리', '튀니지', '이집트', '모로코', '기타'
+    ];
+
+    // 초기 데이터 저장
+    setSetting('intl_regions', json_encode($defaultRegions, JSON_UNESCAPED_UNICODE));
+
+    return $defaultRegions;
 }

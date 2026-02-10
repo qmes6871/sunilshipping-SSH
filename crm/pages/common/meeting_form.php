@@ -351,14 +351,31 @@ include dirname(dirname(__DIR__)) . '/includes/header.php';
             <!-- 회의 녹음 -->
             <div class="recording-section">
                 <div class="recording-controls">
-                    <label class="btn-record start" id="startRecord">
-                        <input type="file" name="audio_file" accept="audio/*" style="display:none">
-                        ⏺ 녹음 파일 등록
+                    <label class="btn-record start" id="audioUploadLabel" style="cursor:pointer;">
+                        <input type="file" name="audio_file" id="audioFileInput" accept="audio/*" style="display:none">
+                        🎤 녹음 파일 등록
                     </label>
                 </div>
                 <div class="audio-list" id="audioList">
-                    <!-- 녹음 파일이 여기에 추가됩니다 -->
+                    <?php if (!empty($meeting['audio_file'])): ?>
+                    <div class="audio-item" style="margin-top: 12px; padding: 12px; background: #e7f5ff; border-radius: 6px;">
+                        <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+                            <span style="font-size: 14px;">🎵 기존 녹음파일</span>
+                            <div style="display: flex; gap: 8px;">
+                                <audio controls src="<?= CRM_UPLOAD_URL ?>/<?= h($meeting['audio_file']) ?>" style="height: 32px;"></audio>
+                                <button type="button" class="btn btn-sm btn-danger" onclick="removeAudioFile()">삭제</button>
+                            </div>
+                        </div>
+                    </div>
+                    <?php endif; ?>
                 </div>
+                <div id="selectedAudioInfo" style="margin-top: 12px; display: none;">
+                    <div style="padding: 12px; background: #d1e7dd; border-radius: 6px; display: flex; align-items: center; justify-content: space-between;">
+                        <span id="selectedAudioName" style="font-size: 14px;">📎 선택된 파일</span>
+                        <button type="button" class="btn btn-sm btn-secondary" onclick="clearAudioFile()">취소</button>
+                    </div>
+                </div>
+                <input type="hidden" name="remove_audio" id="removeAudioInput" value="0">
             </div>
 
             <!-- 회의 안건 -->
@@ -397,8 +414,21 @@ include dirname(dirname(__DIR__)) . '/includes/header.php';
             <!-- 첨부 파일 -->
             <div class="form-group">
                 <label class="form-label">첨부 파일</label>
+                <?php
+                $existingAttachments = !empty($meeting['attachments']) ? json_decode($meeting['attachments'], true) : [];
+                if (!empty($existingAttachments)):
+                ?>
+                <div id="existingAttachments" style="margin-bottom: 12px;">
+                    <?php foreach ($existingAttachments as $index => $attachment): ?>
+                    <div style="padding: 10px 14px; background: #e7f5ff; border-radius: 6px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
+                        <span style="font-size: 14px;">📎 <?= h($attachment['name']) ?></span>
+                        <a href="<?= CRM_UPLOAD_URL ?>/<?= h($attachment['path']) ?>" download class="btn btn-sm btn-outline" style="padding: 4px 10px; font-size: 12px;">다운로드</a>
+                    </div>
+                    <?php endforeach; ?>
+                </div>
+                <?php endif; ?>
                 <input type="file" name="attachments[]" class="form-input" multiple>
-                <div class="help-text">회의 자료, 발표 자료 등을 첨부할 수 있습니다</div>
+                <div class="help-text">회의 자료, 발표 자료 등을 첨부할 수 있습니다 (새 파일을 추가하면 기존 파일과 함께 저장됩니다)</div>
             </div>
 
             <!-- 버튼 그룹 -->
@@ -467,35 +497,50 @@ document.getElementById('attendeeInput').addEventListener('keypress', function(e
     }
 });
 
-// 폼 제출
+// 오디오 파일 선택
+document.getElementById('audioFileInput').addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    if (file) {
+        document.getElementById('selectedAudioName').textContent = '📎 ' + file.name;
+        document.getElementById('selectedAudioInfo').style.display = 'block';
+    }
+});
+
+// 오디오 파일 선택 취소
+function clearAudioFile() {
+    document.getElementById('audioFileInput').value = '';
+    document.getElementById('selectedAudioInfo').style.display = 'none';
+}
+
+// 기존 오디오 파일 삭제 표시
+function removeAudioFile() {
+    document.getElementById('removeAudioInput').value = '1';
+    document.getElementById('audioList').innerHTML = '<div style="padding: 12px; background: #f8d7da; border-radius: 6px; color: #721c24; font-size: 14px;">기존 녹음파일이 삭제됩니다.</div>';
+}
+
+// 폼 제출 - FormData 사용
 document.getElementById('meetingForm').addEventListener('submit', async function(e) {
     e.preventDefault();
 
     const formData = new FormData(this);
     const id = formData.get('id');
-
-    const data = {
-        action: id ? 'update' : 'create',
-        id: id || undefined,
-        title: formData.get('title'),
-        meeting_date: formData.get('meeting_date'),
-        meeting_time: formData.get('meeting_time'),
-        location: formData.get('location'),
-        meeting_type: formData.get('meeting_type'),
-        attendees: formData.get('attendees'),
-        agenda: formData.get('agenda'),
-        content: formData.get('content'),
-        decisions: formData.get('decisions'),
-        action_items: formData.get('action_items'),
-        next_meeting_date: formData.get('next_meeting_date')
-    };
+    formData.append('action', id ? 'update' : 'create');
 
     try {
-        const response = await apiPost(CRM_URL + '/api/common/meetings.php', data);
-        showToast(response.message, 'success');
-        setTimeout(() => location.href = 'meetings.php', 1000);
+        const response = await fetch(CRM_URL + '/api/common/meetings.php', {
+            method: 'POST',
+            body: formData
+        });
+        const result = await response.json();
+
+        if (result.success) {
+            showToast(result.message || '저장되었습니다.', 'success');
+            setTimeout(() => location.href = 'meetings.php', 1000);
+        } else {
+            showToast(result.message || '저장에 실패했습니다.', 'error');
+        }
     } catch (error) {
-        showToast(error.message || '저장에 실패했습니다.', 'error');
+        showToast('저장에 실패했습니다.', 'error');
     }
 });
 

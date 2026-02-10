@@ -244,9 +244,17 @@ include dirname(dirname(__DIR__)) . '/includes/header.php';
         </div>
 
         <!-- 첨부파일 -->
-        <?php if (!empty($warning['attachment_path'])): ?>
+        <?php if (!empty($warning['attachment_path'])):
+            $ext = strtolower(pathinfo($warning['attachment_path'], PATHINFO_EXTENSION));
+            $isImage = in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp']);
+        ?>
         <div class="attachment-section">
             <div class="attachment-title">첨부파일</div>
+            <?php if ($isImage): ?>
+                <div style="margin-bottom: 12px;">
+                    <img src="<?= CRM_UPLOAD_URL ?>/<?= h($warning['attachment_path']) ?>" style="max-width: 100%; border-radius: 8px; cursor: pointer;" onclick="window.open('<?= CRM_UPLOAD_URL ?>/<?= h($warning['attachment_path']) ?>', '_blank')" />
+                </div>
+            <?php endif; ?>
             <a href="<?= CRM_UPLOAD_URL ?>/<?= h($warning['attachment_path']) ?>" class="attachment-link" target="_blank" download>
                 <span>📎</span>
                 <span><?= basename($warning['attachment_path']) ?></span>

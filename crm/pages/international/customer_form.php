@@ -217,11 +217,21 @@ include dirname(dirname(__DIR__)) . '/includes/header.php';
 
                         <div class="form-row">
                             <label class="label" for="nationality">국적</label>
-                            <input class="input" id="nationality" name="nationality" placeholder="예) 대한민국" value="<?= h($customer['nationality'] ?? '') ?>" />
+                            <select class="select" id="nationality" name="nationality">
+                                <option value="">선택하세요</option>
+                                <?php foreach (getIntlCountries() as $country): ?>
+                                <option value="<?= h($country) ?>" <?= ($customer['nationality'] ?? '') === $country ? 'selected' : '' ?>><?= h($country) ?></option>
+                                <?php endforeach; ?>
+                            </select>
                         </div>
                         <div class="form-row">
                             <label class="label" for="export_country">수출국</label>
-                            <input class="input" id="export_country" name="export_country" placeholder="예) 대한민국 / 이집트" value="<?= h($customer['export_country'] ?? '') ?>" />
+                            <select class="select" id="export_country" name="export_country">
+                                <option value="">선택하세요</option>
+                                <?php foreach (getIntlCountries() as $country): ?>
+                                <option value="<?= h($country) ?>" <?= ($customer['export_country'] ?? '') === $country ? 'selected' : '' ?>><?= h($country) ?></option>
+                                <?php endforeach; ?>
+                            </select>
                         </div>
 
                         <div class="form-row">

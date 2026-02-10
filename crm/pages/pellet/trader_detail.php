@@ -479,6 +479,66 @@ include dirname(dirname(__DIR__)) . '/includes/header.php';
         margin-top: 4px;
     }
 
+    /* 활동 상세 내용 */
+    .activity-detail {
+        display: none;
+        padding: 16px;
+        background: #fff7ed;
+        border-top: 2px solid #f97316;
+    }
+
+    .activity-item-wrapper.open .activity-detail { display: block; }
+    .activity-item-wrapper.open .activity-comments { display: block; }
+
+    .activity-detail-grid {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 12px;
+    }
+
+    .activity-detail-field {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+
+    .activity-detail-label {
+        font-size: 12px;
+        font-weight: 600;
+        color: #f97316;
+    }
+
+    .activity-detail-value {
+        padding: 10px 12px;
+        background: white;
+        border-radius: 6px;
+        font-size: 13px;
+        color: #212529;
+        line-height: 1.6;
+        white-space: pre-wrap;
+        word-break: break-word;
+    }
+
+    .activity-detail-value.empty {
+        color: #adb5bd;
+        font-style: italic;
+    }
+
+    .type-detail-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+        margin-top: 8px;
+    }
+
+    .type-detail-grid .activity-detail-field.full-width {
+        grid-column: 1 / -1;
+    }
+
+    @media (max-width: 768px) {
+        .type-detail-grid { grid-template-columns: 1fr; }
+    }
+
     /* 댓글 섹션 */
     .activity-comments {
         display: none;
@@ -515,6 +575,66 @@ include dirname(dirname(__DIR__)) . '/includes/header.php';
     .comment-input-area textarea:focus {
         outline: none;
         border-color: #f97316;
+    }
+
+    .comment-input-controls {
+        display: flex;
+        gap: 8px;
+        margin-top: 8px;
+        align-items: center;
+    }
+
+    .image-upload-btn {
+        padding: 6px 12px;
+        background-color: #6c757d;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 12px;
+    }
+
+    .image-upload-btn:hover {
+        background-color: #5c636a;
+    }
+
+    .comment-image-preview {
+        margin-top: 8px;
+        position: relative;
+        display: inline-block;
+    }
+
+    .comment-image-preview img {
+        max-width: 150px;
+        max-height: 100px;
+        border-radius: 4px;
+        border: 1px solid #dee2e6;
+    }
+
+    .comment-image-preview button {
+        position: absolute;
+        top: -8px;
+        right: -8px;
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        background: #dc3545;
+        color: white;
+        border: none;
+        cursor: pointer;
+        font-size: 12px;
+        line-height: 1;
+    }
+
+    .comment-image {
+        margin-top: 8px;
+    }
+
+    .comment-image img {
+        max-width: 200px;
+        max-height: 150px;
+        border-radius: 4px;
+        cursor: pointer;
     }
 
     .comment-submit-btn {
@@ -963,9 +1083,18 @@ include dirname(dirname(__DIR__)) . '/includes/header.php';
                 <div class="empty-state">등록된 활동이 없습니다.</div>
             <?php else: ?>
                 <?php foreach ($activities as $activity): ?>
-                    <?php $activityId = $activity['id']; ?>
-                    <div class="activity-item-wrapper">
-                        <div class="activity-item" data-activity-id="<?= $activityId ?>">
+                    <?php
+                    $activityId = $activity['id'];
+                    $actDetails = !empty($activity['details']) ? (is_string($activity['details']) ? json_decode($activity['details'], true) : $activity['details']) : [];
+                    ?>
+                    <div class="activity-item-wrapper" id="aw-<?= $activityId ?>"
+                         data-date="<?= $activity['activity_date'] ?? '' ?>"
+                         data-type="<?= htmlspecialchars($activity['activity_type'] ?? '') ?>"
+                         data-description="<?= htmlspecialchars($activity['description'] ?? '') ?>"
+                         data-manager="<?= htmlspecialchars($activity['user_name'] ?? '') ?>"
+                         data-product="<?= htmlspecialchars($actDetails['product_type'] ?? '') ?>"
+                         data-country="<?= htmlspecialchars($actDetails['country'] ?? '') ?>">
+                        <div class="activity-item" data-activity-id="<?= $activityId ?>" onclick="toggleActivity(<?= $activityId ?>)">
                             <div class="activity-icon">
                                 <?php
                                 $icons = [
@@ -996,11 +1125,132 @@ include dirname(dirname(__DIR__)) . '/includes/header.php';
                                 <?php endif; ?>
                             </div>
                         </div>
+                        <div class="activity-detail" id="detail-<?= $activityId ?>">
+                            <div class="activity-detail-grid">
+                                <?php if (!empty($activity['meeting_purpose'])): ?>
+                                <div class="activity-detail-field">
+                                    <span class="activity-detail-label">미팅목적</span>
+                                    <div class="activity-detail-value"><?= nl2br(htmlspecialchars($activity['meeting_purpose'])) ?></div>
+                                </div>
+                                <?php endif; ?>
+
+                                <?php if (!empty($activity['content'])): ?>
+                                <div class="activity-detail-field">
+                                    <span class="activity-detail-label">내용</span>
+                                    <div class="activity-detail-value"><?= nl2br(htmlspecialchars($activity['content'])) ?></div>
+                                </div>
+                                <?php endif; ?>
+
+                                <?php if (!empty($activity['result'])): ?>
+                                <div class="activity-detail-field">
+                                    <span class="activity-detail-label">결과</span>
+                                    <div class="activity-detail-value"><?= nl2br(htmlspecialchars($activity['result'])) ?></div>
+                                </div>
+                                <?php endif; ?>
+
+                                <?php if (!empty($activity['followup'])): ?>
+                                <div class="activity-detail-field">
+                                    <span class="activity-detail-label">후속조치</span>
+                                    <div class="activity-detail-value"><?= nl2br(htmlspecialchars($activity['followup'])) ?></div>
+                                </div>
+                                <?php endif; ?>
+
+                                <?php
+                                $actDetails = null;
+                                if (!empty($activity['details'])) {
+                                    $actDetails = is_string($activity['details']) ? json_decode($activity['details'], true) : $activity['details'];
+                                }
+                                if ($actDetails): ?>
+                                <div class="activity-detail-field">
+                                    <span class="activity-detail-label">유형별 상세</span>
+                                    <div class="type-detail-grid">
+                                        <?php if (!empty($actDetails['meeting_points'])): ?>
+                                        <div class="activity-detail-field full-width">
+                                            <span class="activity-detail-label" style="color: #495057;">미팅요점</span>
+                                            <div class="activity-detail-value"><?= nl2br(htmlspecialchars($actDetails['meeting_points'])) ?></div>
+                                        </div>
+                                        <?php endif; ?>
+                                        <?php if (!empty($actDetails['next_action'])): ?>
+                                        <div class="activity-detail-field full-width">
+                                            <span class="activity-detail-label" style="color: #495057;">다음액션</span>
+                                            <div class="activity-detail-value"><?= nl2br(htmlspecialchars($actDetails['next_action'])) ?></div>
+                                        </div>
+                                        <?php endif; ?>
+                                        <?php if (!empty($actDetails['proposal_price'])): ?>
+                                        <div class="activity-detail-field">
+                                            <span class="activity-detail-label" style="color: #495057;">제안가</span>
+                                            <div class="activity-detail-value"><?= htmlspecialchars($actDetails['proposal_price']) ?></div>
+                                        </div>
+                                        <?php endif; ?>
+                                        <?php if (!empty($actDetails['proposal_conditions'])): ?>
+                                        <div class="activity-detail-field">
+                                            <span class="activity-detail-label" style="color: #495057;">조건</span>
+                                            <div class="activity-detail-value"><?= nl2br(htmlspecialchars($actDetails['proposal_conditions'])) ?></div>
+                                        </div>
+                                        <?php endif; ?>
+                                        <?php if (!empty($actDetails['validity_period'])): ?>
+                                        <div class="activity-detail-field">
+                                            <span class="activity-detail-label" style="color: #495057;">유효기간</span>
+                                            <div class="activity-detail-value"><?= htmlspecialchars($actDetails['validity_period']) ?></div>
+                                        </div>
+                                        <?php endif; ?>
+                                        <?php if (!empty($actDetails['quantity'])): ?>
+                                        <div class="activity-detail-field">
+                                            <span class="activity-detail-label" style="color: #495057;">수량</span>
+                                            <div class="activity-detail-value"><?= htmlspecialchars($actDetails['quantity']) ?></div>
+                                        </div>
+                                        <?php endif; ?>
+                                        <?php if (!empty($actDetails['unit_price'])): ?>
+                                        <div class="activity-detail-field">
+                                            <span class="activity-detail-label" style="color: #495057;">단가</span>
+                                            <div class="activity-detail-value"><?= htmlspecialchars($actDetails['unit_price']) ?></div>
+                                        </div>
+                                        <?php endif; ?>
+                                        <?php if (!empty($actDetails['delivery_date'])): ?>
+                                        <div class="activity-detail-field">
+                                            <span class="activity-detail-label" style="color: #495057;">납기</span>
+                                            <div class="activity-detail-value"><?= htmlspecialchars($actDetails['delivery_date']) ?></div>
+                                        </div>
+                                        <?php endif; ?>
+                                        <?php if (!empty($actDetails['payment'])): ?>
+                                        <div class="activity-detail-field">
+                                            <span class="activity-detail-label" style="color: #495057;">결제</span>
+                                            <div class="activity-detail-value"><?= htmlspecialchars($actDetails['payment']) ?></div>
+                                        </div>
+                                        <?php endif; ?>
+                                        <?php if (!empty($actDetails['shipping'])): ?>
+                                        <div class="activity-detail-field">
+                                            <span class="activity-detail-label" style="color: #495057;">배송</span>
+                                            <div class="activity-detail-value"><?= htmlspecialchars($actDetails['shipping']) ?></div>
+                                        </div>
+                                        <?php endif; ?>
+                                    </div>
+                                </div>
+                                <?php endif; ?>
+
+                                <?php if (empty($activity['meeting_purpose']) && empty($activity['content']) && empty($activity['result']) && empty($activity['followup']) && !$actDetails): ?>
+                                <div class="activity-detail-field">
+                                    <div class="activity-detail-value empty">등록된 상세 내용이 없습니다.</div>
+                                </div>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+
                         <div class="activity-comments" id="comments-<?= $activityId ?>">
                             <div class="activity-comments-title">댓글</div>
                             <div class="comment-input-area">
                                 <textarea placeholder="댓글을 입력하세요..." id="comment-text-<?= $activityId ?>"></textarea>
-                                <button class="comment-submit-btn" onclick="submitComment(<?= $activityId ?>)">댓글 등록</button>
+                                <div class="comment-input-controls">
+                                    <label class="image-upload-btn">
+                                        <input type="file" accept="image/*" id="comment-image-<?= $activityId ?>" onchange="previewCommentImage(<?= $activityId ?>)" style="display:none;">
+                                        <span>이미지 첨부</span>
+                                    </label>
+                                    <button class="comment-submit-btn" onclick="submitComment(<?= $activityId ?>)">댓글 등록</button>
+                                </div>
+                                <div class="comment-image-preview" id="comment-image-preview-<?= $activityId ?>" style="display:none;">
+                                    <img id="comment-image-thumb-<?= $activityId ?>" src="" alt="미리보기">
+                                    <button type="button" onclick="removeCommentImage(<?= $activityId ?>)">X</button>
+                                </div>
                             </div>
                             <div class="comment-list" id="comment-list-<?= $activityId ?>">
                                 <!-- 댓글은 JavaScript로 로드 -->
@@ -1012,6 +1262,22 @@ include dirname(dirname(__DIR__)) . '/includes/header.php';
         </div>
     </div>
 </div>
+
+<script>
+function toggleActivity(activityId) {
+    var allWrappers = document.querySelectorAll('.activity-item-wrapper');
+    var allItems = document.querySelectorAll('.activity-item');
+    var target = document.getElementById('aw-' + activityId);
+    var isOpen = target && target.classList.contains('open');
+    for (var i = 0; i < allItems.length; i++) allItems[i].classList.remove('selected');
+    for (var i = 0; i < allWrappers.length; i++) allWrappers[i].classList.remove('open');
+    if (!isOpen && target) {
+        target.querySelector('.activity-item').classList.add('selected');
+        target.classList.add('open');
+        if (typeof loadComments === 'function') loadComments(activityId);
+    }
+}
+</script>
 
 <?php
 $pageScripts = <<<SCRIPT
@@ -1070,33 +1336,7 @@ async function deleteTrader() {
     }
 })();
 
-// 활동 아이템 클릭하여 댓글 표시/숨기기
-(function(){
-    const activityItems = document.querySelectorAll('.activity-item');
-    activityItems.forEach(function(item) {
-        item.addEventListener('click', function(e) {
-            const wrapper = this.closest('.activity-item-wrapper');
-            const commentSection = wrapper.querySelector('.activity-comments');
-            const isOpen = commentSection.classList.contains('show');
-
-            // 다른 모든 댓글 섹션 닫기
-            document.querySelectorAll('.activity-item').forEach(function(ai) {
-                ai.classList.remove('selected');
-            });
-            document.querySelectorAll('.activity-comments').forEach(function(ac) {
-                ac.classList.remove('show');
-            });
-
-            // 현재 댓글 섹션 토글
-            if (!isOpen) {
-                this.classList.add('selected');
-                commentSection.classList.add('show');
-                // 댓글 로드
-                loadComments(this.dataset.activityId);
-            }
-        });
-    });
-})();
+// 활동 아이템 클릭은 HTML onclick="toggleActivity(id)"로 처리됨
 
 // 댓글 로드
 async function loadComments(activityId) {
@@ -1125,26 +1365,81 @@ function renderComments(container, comments) {
         const level = comment.depth || 0;
         const levelClass = level === 1 ? 'reply' : (level >= 2 ? 'reply-2' : '');
 
+        let imageHtml = '';
+        if (comment.image) {
+            imageHtml = '<div class="comment-image"><img src="' + CRM_URL + '/uploads/' + comment.image + '" onclick="window.open(this.src)" alt="첨부이미지"></div>';
+        }
+
         const html = '<div class="comment-item ' + levelClass + '" data-comment-id="' + comment.id + '">' +
             '<div class="comment-header">' +
                 '<span class="comment-author">' + (comment.user_name || '익명') + '</span>' +
                 '<span class="comment-date-text">' + (comment.created_at || '') + '</span>' +
             '</div>' +
-            '<div class="comment-content">' + (comment.content || '').replace(/\n/g, '<br>') + '</div>' +
+            '<div class="comment-content">' + (comment.content || '').replace(/\\n/g, '<br>') + '</div>' +
+            imageHtml +
             '<div class="comment-actions">' +
                 '<button class="comment-action-btn reply-btn" onclick="showReplyForm(' + comment.id + ')">답글</button>' +
             '</div>' +
             '<div class="comment-reply-area" id="reply-area-' + comment.id + '">' +
                 '<textarea placeholder="답글을 입력하세요..." id="reply-text-' + comment.id + '"></textarea>' +
-                '<div class="comment-reply-controls">' +
+                '<div class="comment-input-controls">' +
+                    '<label class="image-upload-btn">' +
+                        '<input type="file" accept="image/*" id="reply-image-' + comment.id + '" onchange="previewReplyImage(' + comment.id + ')" style="display:none;">' +
+                        '<span>이미지</span>' +
+                    '</label>' +
                     '<button class="comment-reply-submit" onclick="submitReply(' + comment.id + ', ' + comment.activity_id + ')">답글 등록</button>' +
                     '<button class="comment-reply-cancel" onclick="hideReplyForm(' + comment.id + ')">취소</button>' +
+                '</div>' +
+                '<div class="comment-image-preview" id="reply-image-preview-' + comment.id + '" style="display:none;">' +
+                    '<img id="reply-image-thumb-' + comment.id + '" src="" alt="미리보기">' +
+                    '<button type="button" onclick="removeReplyImage(' + comment.id + ')">X</button>' +
                 '</div>' +
             '</div>' +
         '</div>';
 
         container.innerHTML += html;
     });
+}
+
+// 이미지 미리보기
+function previewCommentImage(activityId) {
+    const input = document.getElementById('comment-image-' + activityId);
+    const preview = document.getElementById('comment-image-preview-' + activityId);
+    const thumb = document.getElementById('comment-image-thumb-' + activityId);
+
+    if (input.files && input.files[0]) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            thumb.src = e.target.result;
+            preview.style.display = 'inline-block';
+        };
+        reader.readAsDataURL(input.files[0]);
+    }
+}
+
+function removeCommentImage(activityId) {
+    document.getElementById('comment-image-' + activityId).value = '';
+    document.getElementById('comment-image-preview-' + activityId).style.display = 'none';
+}
+
+function previewReplyImage(commentId) {
+    const input = document.getElementById('reply-image-' + commentId);
+    const preview = document.getElementById('reply-image-preview-' + commentId);
+    const thumb = document.getElementById('reply-image-thumb-' + commentId);
+
+    if (input.files && input.files[0]) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            thumb.src = e.target.result;
+            preview.style.display = 'inline-block';
+        };
+        reader.readAsDataURL(input.files[0]);
+    }
+}
+
+function removeReplyImage(commentId) {
+    document.getElementById('reply-image-' + commentId).value = '';
+    document.getElementById('reply-image-preview-' + commentId).style.display = 'none';
 }
 
 // 답글 폼 표시
@@ -1169,26 +1464,33 @@ function hideReplyForm(commentId) {
 // 댓글 등록
 async function submitComment(activityId) {
     const textarea = document.getElementById('comment-text-' + activityId);
-    const content = textarea.value.trim();
+    const imageInput = document.getElementById('comment-image-' + activityId);
+    const content = textarea ? textarea.value.trim() : '';
+    const hasImage = imageInput && imageInput.files && imageInput.files[0];
 
-    if (!content) {
-        showToast('내용을 입력해주세요.', 'warning');
+    if (!content && !hasImage) {
+        showToast('내용 또는 이미지를 입력해주세요.', 'warning');
         return;
     }
 
     try {
-        const response = await apiPost(CRM_URL + '/api/pellet/comments.php', {
-            action: 'create',
-            activity_id: activityId,
-            content: content
-        });
+        const formData = new FormData();
+        formData.append('action', 'create');
+        formData.append('activity_id', activityId);
+        formData.append('content', content);
+        if (hasImage) {
+            formData.append('image', imageInput.files[0]);
+        }
 
-        if (response.success) {
+        const response = await apiPostForm(CRM_URL + '/api/pellet/comments.php', formData);
+
+        if (response && response.success) {
             textarea.value = '';
+            removeCommentImage(activityId);
             loadComments(activityId);
             showToast('댓글이 등록되었습니다.', 'success');
         } else {
-            showToast(response.message || '댓글 등록에 실패했습니다.', 'error');
+            showToast(response?.message || '댓글 등록에 실패했습니다.', 'error');
         }
     } catch (error) {
         showToast('댓글 등록 중 오류가 발생했습니다.', 'error');
@@ -1198,28 +1500,35 @@ async function submitComment(activityId) {
 // 답글 등록
 async function submitReply(parentId, activityId) {
     const textarea = document.getElementById('reply-text-' + parentId);
-    const content = textarea.value.trim();
+    const imageInput = document.getElementById('reply-image-' + parentId);
+    const content = textarea ? textarea.value.trim() : '';
+    const hasImage = imageInput && imageInput.files && imageInput.files[0];
 
-    if (!content) {
-        showToast('내용을 입력해주세요.', 'warning');
+    if (!content && !hasImage) {
+        showToast('내용 또는 이미지를 입력해주세요.', 'warning');
         return;
     }
 
     try {
-        const response = await apiPost(CRM_URL + '/api/pellet/comments.php', {
-            action: 'create',
-            activity_id: activityId,
-            parent_id: parentId,
-            content: content
-        });
+        const formData = new FormData();
+        formData.append('action', 'create');
+        formData.append('activity_id', activityId);
+        formData.append('parent_id', parentId);
+        formData.append('content', content);
+        if (hasImage) {
+            formData.append('image', imageInput.files[0]);
+        }
 
-        if (response.success) {
+        const response = await apiPostForm(CRM_URL + '/api/pellet/comments.php', formData);
+
+        if (response && response.success) {
             textarea.value = '';
+            removeReplyImage(parentId);
             hideReplyForm(parentId);
             loadComments(activityId);
             showToast('답글이 등록되었습니다.', 'success');
         } else {
-            showToast(response.message || '답글 등록에 실패했습니다.', 'error');
+            showToast(response?.message || '답글 등록에 실패했습니다.', 'error');
         }
     } catch (error) {
         showToast('답글 등록 중 오류가 발생했습니다.', 'error');
@@ -1228,13 +1537,65 @@ async function submitReply(parentId, activityId) {
 
 // 검색 기능
 function searchActivities() {
-    showToast('검색 기능은 준비 중입니다.', 'info');
+    const searchProduct = (document.getElementById('searchProduct')?.value || '').toLowerCase();
+    const searchCountry = (document.getElementById('searchCountry')?.value || '').toLowerCase();
+    const searchManager = (document.getElementById('searchManager')?.value || '').toLowerCase();
+    const searchDateFrom = document.getElementById('searchDateFrom')?.value || '';
+    const searchDateTo = document.getElementById('searchDateTo')?.value || '';
+
+    const wrappers = document.querySelectorAll('.activity-item-wrapper');
+    let visibleCount = 0;
+
+    wrappers.forEach(function(wrapper) {
+        const date = wrapper.dataset.date || '';
+        const description = (wrapper.dataset.description || '').toLowerCase();
+        const manager = (wrapper.dataset.manager || '').toLowerCase();
+        const product = (wrapper.dataset.product || '').toLowerCase();
+        const country = (wrapper.dataset.country || '').toLowerCase();
+
+        let show = true;
+
+        // 제품유형 검색
+        if (searchProduct && !product.includes(searchProduct) && !description.includes(searchProduct)) {
+            show = false;
+        }
+
+        // 국가 검색
+        if (searchCountry && !country.includes(searchCountry) && !description.includes(searchCountry)) {
+            show = false;
+        }
+
+        // 담당자 검색
+        if (searchManager && !manager.includes(searchManager)) {
+            show = false;
+        }
+
+        // 기간 검색
+        if (searchDateFrom && date < searchDateFrom) {
+            show = false;
+        }
+        if (searchDateTo && date > searchDateTo) {
+            show = false;
+        }
+
+        wrapper.style.display = show ? '' : 'none';
+        if (show) visibleCount++;
+    });
+
+    showToast(visibleCount + '개의 활동이 검색되었습니다.', 'info');
 }
 
 function resetSearch() {
     document.querySelectorAll('.search-input').forEach(function(input) {
         input.value = '';
     });
+
+    // 모든 활동 다시 표시
+    document.querySelectorAll('.activity-item-wrapper').forEach(function(wrapper) {
+        wrapper.style.display = '';
+    });
+
+    showToast('검색이 초기화되었습니다.', 'info');
 }
 </script>
 SCRIPT;

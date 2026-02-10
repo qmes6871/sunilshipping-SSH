@@ -24,6 +24,14 @@ $pageSubtitle = $pageSubtitle ?? '';
     <!-- Chart.js (성과 차트용) -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
+    <!-- Global JavaScript Variables -->
+    <script>
+        window.CRM_URL = '<?= CRM_URL ?>';
+        window.CRM_UPLOAD_URL = '<?= CRM_UPLOAD_URL ?>';
+        var CRM_URL = window.CRM_URL;
+        var CRM_UPLOAD_URL = window.CRM_UPLOAD_URL;
+    </script>
+
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
 

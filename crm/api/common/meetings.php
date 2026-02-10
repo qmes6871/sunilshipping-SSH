@@ -59,7 +59,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 
 // POST: 회의록 생성/수정/삭제
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $input = json_decode(file_get_contents('php://input'), true);
+    // FormData 또는 JSON 입력 처리
+    $contentType = $_SERVER['CONTENT_TYPE'] ?? '';
+    if (strpos($contentType, 'application/json') !== false) {
+        $input = json_decode(file_get_contents('php://input'), true);
+    } else {
+        // FormData (multipart/form-data)
+        $input = $_POST;
+    }
     $action = $input['action'] ?? 'create';
 
     switch ($action) {
@@ -84,12 +91,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 errorResponse('회의 일자를 입력해주세요.');
             }
 
+            // 오디오 파일 업로드 처리
+            $audioFilePath = null;
+            if (!empty($_FILES['audio_file']['name'])) {
+                $uploadResult = uploadFile($_FILES['audio_file'], 'meetings/audio', CRM_ALLOWED_AUDIO_TYPES);
+                if ($uploadResult['success']) {
+                    $audioFilePath = $uploadResult['path'];
+                }
+            }
+
+            // 첨부파일 업로드 처리
+            $attachmentPaths = [];
+            if (!empty($_FILES['attachments']['name'][0])) {
+                $allowedTypes = array_merge(CRM_ALLOWED_IMAGE_TYPES, CRM_ALLOWED_DOC_TYPES);
+                foreach ($_FILES['attachments']['tmp_name'] as $key => $tmpName) {
+                    if ($_FILES['attachments']['error'][$key] === UPLOAD_ERR_OK) {
+                        $file = [
+                            'name' => $_FILES['attachments']['name'][$key],
+                            'type' => $_FILES['attachments']['type'][$key],
+                            'tmp_name' => $tmpName,
+                            'error' => $_FILES['attachments']['error'][$key],
+                            'size' => $_FILES['attachments']['size'][$key]
+                        ];
+                        $uploadResult = uploadFile($file, 'meetings/attachments', $allowedTypes);
+                        if ($uploadResult['success']) {
+                            $attachmentPaths[] = [
+                                'name' => $uploadResult['original_name'],
+                                'path' => $uploadResult['path'],
+                                'size' => $uploadResult['size']
+                            ];
+                        }
+                    }
+                }
+            }
+            $attachmentsJson = !empty($attachmentPaths) ? json_encode($attachmentPaths) : null;
+
             try {
                 $pdo->beginTransaction();
 
                 $stmt = $pdo->prepare("INSERT INTO " . CRM_MEETINGS_TABLE . "
-                    (title, meeting_date, meeting_time, location, meeting_type, agenda, content, decisions, action_items, next_meeting_date, created_by, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())");
+                    (title, meeting_date, meeting_time, location, meeting_type, agenda, content, decisions, action_items, audio_file, attachments, next_meeting_date, created_by, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())");
                 $stmt->execute([
                     $title,
                     $meetingDate,
@@ -100,6 +142,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $content,
                     $decisions,
                     $actionItems,
+                    $audioFilePath,
+                    $attachmentsJson,
                     $nextMeetingDate,
                     $currentUser['crm_user_id']
                 ]);
@@ -126,7 +170,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 successResponse(['id' => $meetingId], '회의록이 등록되었습니다.');
             } catch (Exception $e) {
                 $pdo->rollBack();
-                errorResponse('등록 중 오류가 발생했습니다.');
+                errorResponse('등록 중 오류가 발생했습니다: ' . $e->getMessage());
             }
             break;
 
@@ -144,6 +188,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $actionItems = trim($input['action_items'] ?? '');
             $nextMeetingDate = $input['next_meeting_date'] ?: null;
             $attendees = trim($input['attendees'] ?? '');
+            $removeAudio = ($input['remove_audio'] ?? '0') === '1';
 
             if (!$id) {
                 errorResponse('회의록 ID가 필요합니다.');
@@ -155,12 +200,63 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 errorResponse('회의 일자를 입력해주세요.');
             }
 
+            // 기존 회의록 정보 조회
+            $stmt = $pdo->prepare("SELECT audio_file, attachments FROM " . CRM_MEETINGS_TABLE . " WHERE id = ?");
+            $stmt->execute([$id]);
+            $existingMeeting = $stmt->fetch();
+            $audioFilePath = $existingMeeting['audio_file'] ?? null;
+            $existingAttachments = !empty($existingMeeting['attachments']) ? json_decode($existingMeeting['attachments'], true) : [];
+
+            // 오디오 파일 삭제 요청
+            if ($removeAudio && $audioFilePath) {
+                deleteFile($audioFilePath);
+                $audioFilePath = null;
+            }
+
+            // 새 오디오 파일 업로드
+            if (!empty($_FILES['audio_file']['name'])) {
+                // 기존 파일 삭제
+                if ($audioFilePath) {
+                    deleteFile($audioFilePath);
+                }
+                $uploadResult = uploadFile($_FILES['audio_file'], 'meetings/audio', CRM_ALLOWED_AUDIO_TYPES);
+                if ($uploadResult['success']) {
+                    $audioFilePath = $uploadResult['path'];
+                }
+            }
+
+            // 새 첨부파일 업로드
+            $attachmentPaths = $existingAttachments;
+            if (!empty($_FILES['attachments']['name'][0])) {
+                $allowedTypes = array_merge(CRM_ALLOWED_IMAGE_TYPES, CRM_ALLOWED_DOC_TYPES);
+                foreach ($_FILES['attachments']['tmp_name'] as $key => $tmpName) {
+                    if ($_FILES['attachments']['error'][$key] === UPLOAD_ERR_OK) {
+                        $file = [
+                            'name' => $_FILES['attachments']['name'][$key],
+                            'type' => $_FILES['attachments']['type'][$key],
+                            'tmp_name' => $tmpName,
+                            'error' => $_FILES['attachments']['error'][$key],
+                            'size' => $_FILES['attachments']['size'][$key]
+                        ];
+                        $uploadResult = uploadFile($file, 'meetings/attachments', $allowedTypes);
+                        if ($uploadResult['success']) {
+                            $attachmentPaths[] = [
+                                'name' => $uploadResult['original_name'],
+                                'path' => $uploadResult['path'],
+                                'size' => $uploadResult['size']
+                            ];
+                        }
+                    }
+                }
+            }
+            $attachmentsJson = !empty($attachmentPaths) ? json_encode($attachmentPaths) : null;
+
             try {
                 $pdo->beginTransaction();
 
                 $stmt = $pdo->prepare("UPDATE " . CRM_MEETINGS_TABLE . "
                     SET title = ?, meeting_date = ?, meeting_time = ?, location = ?, meeting_type = ?,
-                        agenda = ?, content = ?, decisions = ?, action_items = ?, next_meeting_date = ?, updated_at = NOW()
+                        agenda = ?, content = ?, decisions = ?, action_items = ?, audio_file = ?, attachments = ?, next_meeting_date = ?, updated_at = NOW()
                     WHERE id = ?");
                 $stmt->execute([
                     $title,
@@ -172,6 +268,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $content,
                     $decisions,
                     $actionItems,
+                    $audioFilePath,
+                    $attachmentsJson,
                     $nextMeetingDate,
                     $id
                 ]);
@@ -199,7 +297,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 successResponse(null, '회의록이 수정되었습니다.');
             } catch (Exception $e) {
                 $pdo->rollBack();
-                errorResponse('수정 중 오류가 발생했습니다.');
+                errorResponse('수정 중 오류가 발생했습니다: ' . $e->getMessage());
             }
             break;
 

@@ -16,7 +16,7 @@ $customer = null;
 // 바이어 선택된 경우 정보 조회
 if ($customerId) {
     try {
-        $stmt = $pdo->prepare("SELECT id, name FROM " . CRM_INTL_CUSTOMERS_TABLE . " WHERE id = ?");
+        $stmt = $pdo->prepare("SELECT id, name, nationality FROM " . CRM_INTL_CUSTOMERS_TABLE . " WHERE id = ?");
         $stmt->execute([$customerId]);
         $customer = $stmt->fetch();
     } catch (Exception $e) {
@@ -69,15 +69,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $data['booking_info'] = $bookingInfo;
         }
 
-        if (empty($data['activity_content'])) {
-            $message = '활동 내용을 입력해주세요.';
-            $messageType = 'error';
-        } else {
-            try {
+        try {
+                // 부킹완료/정산완료일 경우 details JSON 준비
+                $detailsJson = null;
+                if ($activityType === 'booking_completed' && isset($data['booking_info'])) {
+                    $detailsJson = $data['booking_info'];
+                }
+
                 $stmt = $pdo->prepare("INSERT INTO " . CRM_INTL_ACTIVITIES_TABLE . "
                     (customer_id, activity_date, activity_type, booking_completed, meeting_purpose,
-                    activity_content, activity_result, followup_items, created_by, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())");
+                    activity_content, activity_result, followup_items, details, created_by, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())");
                 $stmt->execute([
                     $data['customer_id'],
                     $data['activity_date'],
@@ -87,13 +89,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $data['activity_content'],
                     $data['activity_result'],
                     $data['followup_items'],
+                    $detailsJson,
                     $currentUser['crm_user_id']
                 ]);
 
                 // 파일 업로드 처리
                 if (!empty($_FILES['recording']['name'])) {
                     $activityId = $pdo->lastInsertId();
-                    $result = uploadFile($_FILES['recording'], 'activities/recordings', ['audio/mpeg', 'audio/wav', 'audio/mp3', 'audio/webm']);
+                    $result = uploadFile($_FILES['recording'], 'activities/recordings', CRM_ALLOWED_AUDIO_TYPES);
                     if ($result['success']) {
                         $stmt = $pdo->prepare("INSERT INTO " . CRM_FILES_TABLE . "
                             (entity_type, entity_id, file_name, file_path, file_size, file_type, uploaded_by, created_at)
@@ -114,7 +117,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $message = '저장 중 오류가 발생했습니다.';
                 $messageType = 'error';
             }
-        }
     }
 }
 
@@ -316,6 +318,32 @@ include dirname(dirname(__DIR__)) . '/includes/header.php';
 /* 숨김 클래스 */
 .hidden { display: none; }
 
+/* 거래처 고정 표시 */
+.customer-fixed {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    background: #e7f5ff;
+    border: 1px solid #74c0fc;
+    border-radius: 6px;
+}
+
+.customer-name {
+    font-size: 15px;
+    font-weight: 600;
+    color: #1c7ed6;
+}
+
+.customer-badge {
+    padding: 4px 10px;
+    background: #1c7ed6;
+    color: white;
+    font-size: 12px;
+    font-weight: 600;
+    border-radius: 12px;
+}
+
 /* 알림 */
 .alert {
     padding: 16px;
@@ -355,17 +383,32 @@ include dirname(dirname(__DIR__)) . '/includes/header.php';
 
             <div class="form-group">
                 <label class="form-label">거래처</label>
-                <select name="customer_id" class="form-select" id="client">
-                    <option value="">선택 (미지정)</option>
-                    <?php foreach ($customers as $c): ?>
-                        <option value="<?= $c['id'] ?>" <?= $customerId == $c['id'] ? 'selected' : '' ?>>
-                            <?= h($c['name']) ?>
-                            <?php if ($c['nationality']): ?>
-                                (<?= h($c['nationality']) ?>)
+                <?php if ($customer): ?>
+                    <!-- 거래처가 지정된 경우 고정 표시 -->
+                    <input type="hidden" name="customer_id" value="<?= $customer['id'] ?>">
+                    <div class="customer-fixed">
+                        <span class="customer-name">
+                            <?= h($customer['name']) ?>
+                            <?php if (!empty($customer['nationality'])): ?>
+                                <span style="font-weight: 400; color: #495057;"> (<?= h($customer['nationality']) ?>)</span>
                             <?php endif; ?>
-                        </option>
-                    <?php endforeach; ?>
-                </select>
+                        </span>
+                        <span class="customer-badge">고정</span>
+                    </div>
+                <?php else: ?>
+                    <!-- 거래처가 지정되지 않은 경우 선택 가능 -->
+                    <select name="customer_id" class="form-select" id="client">
+                        <option value="">선택 (미지정)</option>
+                        <?php foreach ($customers as $c): ?>
+                            <option value="<?= $c['id'] ?>">
+                                <?= h($c['name']) ?>
+                                <?php if ($c['nationality']): ?>
+                                    (<?= h($c['nationality']) ?>)
+                                <?php endif; ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                <?php endif; ?>
             </div>
 
             <div class="form-group">
@@ -454,8 +497,8 @@ include dirname(dirname(__DIR__)) . '/includes/header.php';
             </div>
 
             <div class="form-group">
-                <label class="form-label">내용 <span style="color: #dc3545;">*</span></label>
-                <textarea name="activity_content" class="form-textarea" placeholder="미팅 내용을 상세히 입력하세요" id="content" required></textarea>
+                <label class="form-label">내용</label>
+                <textarea name="activity_content" class="form-textarea" placeholder="미팅 내용을 상세히 입력하세요" id="content"></textarea>
             </div>
 
             <div class="form-group">

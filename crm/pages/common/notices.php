@@ -24,7 +24,18 @@ try {
         }
 
         $hasIsImportant = in_array('is_important', $columns);
-        $orderClause = $hasIsImportant ? "ORDER BY n.is_important DESC, n.created_at DESC" : "ORDER BY n.created_at DESC";
+        $hasIsRead = in_array('is_read', $columns);
+
+        // 미확인 공지 우선 정렬
+        $orderParts = [];
+        if ($hasIsRead) {
+            $orderParts[] = "COALESCE(n.is_read, 0) ASC"; // 미확인(0/NULL) 먼저
+        }
+        if ($hasIsImportant) {
+            $orderParts[] = "n.is_important DESC";
+        }
+        $orderParts[] = "n.created_at DESC";
+        $orderClause = "ORDER BY " . implode(", ", $orderParts);
 
         $stmt = $pdo->prepare("SELECT n.*, u.name as creator_name
             FROM " . CRM_NOTICES_TABLE . " n

@@ -390,6 +390,20 @@ include dirname(dirname(__DIR__)) . '/includes/header.php';
 .status-badge.fair { background: #fff3cd; color: #664d03; }
 .status-badge.poor { background: #f8d7da; color: #842029; }
 
+/* 액션 버튼 */
+.btn-action {
+    padding: 4px 8px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    background: transparent;
+    transition: all 0.2s;
+}
+.btn-action:hover { background: #f1f3f5; }
+.btn-action.edit:hover { background: #e7f5ff; }
+.btn-action.delete:hover { background: #ffe3e3; }
+
 /* 모달 */
 .modal {
     display: none;
@@ -568,7 +582,7 @@ include dirname(dirname(__DIR__)) . '/includes/header.php';
     </div>
 
     <!-- 통계 요약 -->
-    <div class="stats-summary">
+    <div class="stats-summary" style="grid-template-columns: repeat(2, 1fr);">
         <div class="stat-box">
             <div class="stat-label">총 수출량</div>
             <div class="stat-value"><?= number_format($totalExport) ?>톤</div>
@@ -578,16 +592,6 @@ include dirname(dirname(__DIR__)) . '/includes/header.php';
             <div class="stat-label">목표 달성률</div>
             <div class="stat-value"><?= $avgAchievement ?>%</div>
             <div class="stat-change up">▲ 7.5% 전월 대비</div>
-        </div>
-        <div class="stat-box">
-            <div class="stat-label">신선도 유지율</div>
-            <div class="stat-value">96%</div>
-            <div class="stat-change up">▲ 2.1% 향상</div>
-        </div>
-        <div class="stat-box">
-            <div class="stat-label">품질 적합률</div>
-            <div class="stat-value">98%</div>
-            <div class="stat-change up">▲ 1.8% 향상</div>
         </div>
     </div>
 
@@ -692,6 +696,7 @@ include dirname(dirname(__DIR__)) . '/includes/header.php';
                     <th>실적</th>
                     <th>달성률</th>
                     <th>평가</th>
+                    <th style="width: 100px;">관리</th>
                 </tr>
             </thead>
             <tbody>
@@ -729,6 +734,7 @@ include dirname(dirname(__DIR__)) . '/includes/header.php';
                             </div>
                         </td>
                         <td><span class="status-badge <?= $badgeClass ?>"><?= $badgeText ?></span></td>
+                        <td>-</td>
                     </tr>
                     <?php endforeach; ?>
                 <?php else: ?>
@@ -752,6 +758,10 @@ include dirname(dirname(__DIR__)) . '/includes/header.php';
                             </div>
                         </td>
                         <td><span class="status-badge <?= $badgeClass ?>"><?= $badgeText ?></span></td>
+                        <td>
+                            <button class="btn-action edit" onclick='editPersonalPerformance(<?= json_encode($data, JSON_HEX_APOS | JSON_HEX_QUOT) ?>)' title="수정">✏️</button>
+                            <button class="btn-action delete" onclick="deletePersonalPerformance(<?= $data['id'] ?? 0 ?>)" title="삭제">🗑️</button>
+                        </td>
                     </tr>
                     <?php endforeach; ?>
                 <?php endif; ?>
@@ -760,16 +770,18 @@ include dirname(dirname(__DIR__)) . '/includes/header.php';
     </div>
 </div>
 
-<!-- 차트 등록 모달 -->
+<!-- 차트 등록/수정 모달 -->
 <div id="chartModal" class="modal">
     <div class="modal-content">
         <div class="modal-header">
-            <h2>농산물 성과 데이터 등록</h2>
+            <h2 id="modalTitle">농산물 성과 데이터 등록</h2>
             <button class="close-btn" onclick="closeChartModal()">&times;</button>
         </div>
         <div class="modal-body">
             <form id="chartForm">
                 <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?? '' ?>">
+                <input type="hidden" name="action" id="formAction" value="create">
+                <input type="hidden" name="id" id="formId" value="">
                 <div class="form-row">
                     <div class="form-group">
                         <label for="chartYear">년도 *</label>
@@ -869,11 +881,88 @@ function changePersonalFilter() {
     location.href = '?year=' + year + '&month=' + month;
 }
 
-// 차트 모달 열기
+// 차트 모달 열기 (신규 등록)
 function openChartModal() {
+    document.getElementById('modalTitle').textContent = '농산물 성과 데이터 등록';
+    document.getElementById('formAction').value = 'create';
+    document.getElementById('formId').value = '';
+    document.getElementById('chartForm').reset();
+
     const modal = document.getElementById('chartModal');
     modal.classList.add('active');
     document.body.style.overflow = 'hidden';
+}
+
+// 차트 수정 모달 열기
+function editPerformance(data) {
+    document.getElementById('modalTitle').textContent = '농산물 성과 데이터 수정';
+    document.getElementById('formAction').value = 'update';
+    document.getElementById('formId').value = data.id;
+    document.getElementById('chartYear').value = data.year || '';
+    document.getElementById('chartMonth').value = data.month || '';
+    document.getElementById('chartBusiness').value = data.business || '';
+    document.getElementById('chartActual').value = data.actual || 0;
+    document.getElementById('chartTarget').value = data.target || 0;
+    document.getElementById('chartFreshness').value = data.freshness || '';
+    document.getElementById('chartQuality').value = data.quality || '';
+    document.getElementById('chartNote').value = data.note || '';
+
+    const modal = document.getElementById('chartModal');
+    modal.classList.add('active');
+    document.body.style.overflow = 'hidden';
+}
+
+// 개인 실적 수정
+function editPersonalPerformance(data) {
+    // personal_performance_form.php로 이동 (수정 모드)
+    location.href = 'personal_performance_form.php?id=' + data.id;
+}
+
+// 개인 실적 삭제
+async function deletePersonalPerformance(id) {
+    if (!id || !confirm('정말 삭제하시겠습니까?')) return;
+
+    try {
+        const response = await apiPost(CRM_URL + '/api/agricultural/personal_performance.php', {
+            action: 'delete',
+            id: id
+        });
+
+        if (response.success) {
+            showToast('삭제되었습니다.', 'success');
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showToast(response.message || '삭제에 실패했습니다.', 'error');
+        }
+    } catch (error) {
+        showToast('삭제 중 오류가 발생했습니다.', 'error');
+    }
+}
+
+// 성과 삭제
+async function deletePerformance(id) {
+    if (!id || !confirm('정말 삭제하시겠습니까?')) return;
+
+    try {
+        const formData = new FormData();
+        formData.append('action', 'delete');
+        formData.append('id', id);
+
+        const response = await fetch(CRM_URL + '/api/agricultural/performance.php', {
+            method: 'POST',
+            body: formData
+        });
+        const result = await response.json();
+
+        if (result.success) {
+            showToast('삭제되었습니다.', 'success');
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showToast(result.message || '삭제에 실패했습니다.', 'error');
+        }
+    } catch (error) {
+        showToast('삭제 중 오류가 발생했습니다.', 'error');
+    }
 }
 
 // 차트 모달 닫기
@@ -882,6 +971,8 @@ function closeChartModal() {
     modal.classList.remove('active');
     document.body.style.overflow = 'auto';
     document.getElementById('chartForm').reset();
+    document.getElementById('formAction').value = 'create';
+    document.getElementById('formId').value = '';
 }
 
 // 모달 외부 클릭시 닫기

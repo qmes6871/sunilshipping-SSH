@@ -1,14 +1,32 @@
 <?php
 /**
- * 농산물 개인실적 등록
+ * 농산물 개인실적 등록/수정
  */
 
 require_once dirname(dirname(__DIR__)) . '/includes/auth_check.php';
 
-$pageTitle = '개인실적 등록';
-$pageSubtitle = '농산물 월별 개인 실적 등록';
-
 $pdo = getDB();
+
+// 수정 모드 확인
+$editId = $_GET['id'] ?? null;
+$editData = null;
+$isEdit = false;
+
+if ($editId) {
+    try {
+        $stmt = $pdo->prepare("SELECT * FROM " . CRM_AGRI_PERSONAL_PERFORMANCE_TABLE . " WHERE id = ?");
+        $stmt->execute([$editId]);
+        $editData = $stmt->fetch();
+        if ($editData) {
+            $isEdit = true;
+        }
+    } catch (Exception $e) {
+        // 오류 시 신규 등록 모드
+    }
+}
+
+$pageTitle = $isEdit ? '개인실적 수정' : '개인실적 등록';
+$pageSubtitle = '농산물 월별 개인 실적 ' . ($isEdit ? '수정' : '등록');
 
 // 품목 목록
 $crops = ['배', '사과', '감귤', '딸기', '수박', '포도', '기타'];
@@ -43,28 +61,49 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // 직원명 가져오기
                 $employeeName = $currentUser['mb_name'] ?? $currentUser['mb_nick'] ?? '';
 
-                $stmt = $pdo->prepare("INSERT INTO " . CRM_AGRI_PERSONAL_PERFORMANCE_TABLE . "
-                    (user_id, employee_name, year, month, item_name, target_amount, actual_amount, achievement_rate, notes, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
-                    ON DUPLICATE KEY UPDATE
-                    target_amount = VALUES(target_amount),
-                    actual_amount = VALUES(actual_amount),
-                    achievement_rate = VALUES(achievement_rate),
-                    notes = VALUES(notes),
-                    updated_at = NOW()");
-                $stmt->execute([
-                    $data['user_id'],
-                    $employeeName,
-                    $data['period_year'],
-                    $data['period_month'],
-                    $data['crop'],
-                    $data['target_ton'],
-                    $data['actual_ton'],
-                    $achievementRate,
-                    $data['notes']
-                ]);
+                $postId = $_POST['id'] ?? null;
 
-                $message = '실적이 등록되었습니다.';
+                if ($postId) {
+                    // 수정 모드
+                    $stmt = $pdo->prepare("UPDATE " . CRM_AGRI_PERSONAL_PERFORMANCE_TABLE . "
+                        SET year = ?, month = ?, item_name = ?, target_amount = ?, actual_amount = ?, achievement_rate = ?, notes = ?, updated_at = NOW()
+                        WHERE id = ?");
+                    $stmt->execute([
+                        $data['period_year'],
+                        $data['period_month'],
+                        $data['crop'],
+                        $data['target_ton'],
+                        $data['actual_ton'],
+                        $achievementRate,
+                        $data['notes'],
+                        $postId
+                    ]);
+                    $message = '실적이 수정되었습니다.';
+                } else {
+                    // 신규 등록 모드
+                    $stmt = $pdo->prepare("INSERT INTO " . CRM_AGRI_PERSONAL_PERFORMANCE_TABLE . "
+                        (user_id, employee_name, year, month, item_name, target_amount, actual_amount, achievement_rate, notes, created_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+                        ON DUPLICATE KEY UPDATE
+                        target_amount = VALUES(target_amount),
+                        actual_amount = VALUES(actual_amount),
+                        achievement_rate = VALUES(achievement_rate),
+                        notes = VALUES(notes),
+                        updated_at = NOW()");
+                    $stmt->execute([
+                        $data['user_id'],
+                        $employeeName,
+                        $data['period_year'],
+                        $data['period_month'],
+                        $data['crop'],
+                        $data['target_ton'],
+                        $data['actual_ton'],
+                        $achievementRate,
+                        $data['notes']
+                    ]);
+                    $message = '실적이 등록되었습니다.';
+                }
+
                 $messageType = 'success';
             } catch (Exception $e) {
                 $message = '저장 중 오류가 발생했습니다: ' . $e->getMessage();
@@ -146,18 +185,21 @@ textarea { resize: vertical; min-height: 80px; }
         <div class="alert alert-<?= $messageType ?>"><?= h($message) ?></div>
     <?php endif; ?>
 
-    <h1>개인실적 등록</h1>
-    <p class="subtitle">농산물 월별 개인 실적 등록</p>
+    <h1><?= $isEdit ? '개인실적 수정' : '개인실적 등록' ?></h1>
+    <p class="subtitle">농산물 월별 개인 실적 <?= $isEdit ? '수정' : '등록' ?></p>
 
     <form method="POST">
         <input type="hidden" name="csrf_token" value="<?= $csrfToken ?>">
+        <?php if ($isEdit): ?>
+        <input type="hidden" name="id" value="<?= $editData['id'] ?>">
+        <?php endif; ?>
 
         <div class="form-row">
             <div class="form-group">
                 <label for="year">년도</label>
                 <select id="year" name="year">
                     <?php for ($y = date('Y'); $y >= date('Y') - 3; $y--): ?>
-                        <option value="<?= $y ?>" <?= $y == date('Y') ? 'selected' : '' ?>><?= $y ?>년</option>
+                        <option value="<?= $y ?>" <?= ($editData['year'] ?? date('Y')) == $y ? 'selected' : '' ?>><?= $y ?>년</option>
                     <?php endfor; ?>
                 </select>
             </div>
@@ -165,7 +207,7 @@ textarea { resize: vertical; min-height: 80px; }
                 <label for="month">월</label>
                 <select id="month" name="month">
                     <?php for ($m = 1; $m <= 12; $m++): ?>
-                        <option value="<?= $m ?>" <?= $m == date('n') ? 'selected' : '' ?>><?= $m ?>월</option>
+                        <option value="<?= $m ?>" <?= ($editData['month'] ?? date('n')) == $m ? 'selected' : '' ?>><?= $m ?>월</option>
                     <?php endfor; ?>
                 </select>
             </div>
@@ -174,14 +216,14 @@ textarea { resize: vertical; min-height: 80px; }
         <div class="form-row">
             <div class="form-group">
                 <label for="name">이름</label>
-                <input type="text" id="name" value="<?= h($currentUser['mb_name'] ?? $currentUser['mb_nick'] ?? '') ?>" readonly>
+                <input type="text" id="name" value="<?= h($editData['employee_name'] ?? $currentUser['mb_name'] ?? $currentUser['mb_nick'] ?? '') ?>" readonly>
             </div>
             <div class="form-group">
                 <label for="crop">품목</label>
                 <select id="crop" name="crop" required>
                     <option value="">선택</option>
                     <?php foreach ($crops as $crop): ?>
-                        <option value="<?= $crop ?>"><?= $crop ?></option>
+                        <option value="<?= $crop ?>" <?= ($editData['item_name'] ?? '') === $crop ? 'selected' : '' ?>><?= $crop ?></option>
                     <?php endforeach; ?>
                 </select>
             </div>
@@ -190,22 +232,22 @@ textarea { resize: vertical; min-height: 80px; }
         <div class="form-row">
             <div class="form-group">
                 <label for="target">목표 (톤)</label>
-                <input type="number" id="target" name="target" placeholder="0" min="0" step="0.1">
+                <input type="number" id="target" name="target" placeholder="0" min="0" step="0.1" value="<?= $editData['target_amount'] ?? '' ?>">
             </div>
             <div class="form-group">
                 <label for="actual">실적 (톤)</label>
-                <input type="number" id="actual" name="actual" placeholder="0" min="0" step="0.1">
+                <input type="number" id="actual" name="actual" placeholder="0" min="0" step="0.1" value="<?= $editData['actual_amount'] ?? '' ?>">
             </div>
         </div>
 
         <div class="form-group">
             <label for="notes">비고</label>
-            <textarea id="notes" name="notes" placeholder="메모"></textarea>
+            <textarea id="notes" name="notes" placeholder="메모"><?= h($editData['notes'] ?? '') ?></textarea>
         </div>
 
         <div class="btn-group">
             <a href="performance_chart.php" class="btn btn-cancel">취소</a>
-            <button type="submit" class="btn btn-submit">등록</button>
+            <button type="submit" class="btn btn-submit"><?= $isEdit ? '수정' : '등록' ?></button>
         </div>
     </form>
 </div>

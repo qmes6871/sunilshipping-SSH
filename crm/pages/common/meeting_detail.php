@@ -265,6 +265,44 @@ include dirname(dirname(__DIR__)) . '/includes/header.php';
         </div>
         <?php endif; ?>
 
+        <!-- 녹음 파일 -->
+        <?php if (!empty($meeting['audio_file'])): ?>
+        <div class="detail-section">
+            <div class="section-title">🎤 녹음 파일</div>
+            <div style="padding: 16px; background: #f8f9fa; border-radius: 8px;">
+                <audio controls style="width: 100%; max-width: 500px;">
+                    <source src="<?= CRM_UPLOAD_URL ?>/<?= h($meeting['audio_file']) ?>" type="audio/mpeg">
+                    브라우저가 오디오를 지원하지 않습니다.
+                </audio>
+                <div style="margin-top: 8px;">
+                    <a href="<?= CRM_UPLOAD_URL ?>/<?= h($meeting['audio_file']) ?>" download class="btn btn-sm btn-outline" style="padding: 6px 12px; font-size: 13px;">
+                        📥 다운로드
+                    </a>
+                </div>
+            </div>
+        </div>
+        <?php endif; ?>
+
+        <!-- 첨부 파일 -->
+        <?php
+        $attachments = !empty($meeting['attachments']) ? json_decode($meeting['attachments'], true) : [];
+        if (!empty($attachments)):
+        ?>
+        <div class="detail-section">
+            <div class="section-title">📎 첨부 파일</div>
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+                <?php foreach ($attachments as $attachment): ?>
+                <div style="padding: 12px 16px; background: #f8f9fa; border-radius: 6px; display: flex; justify-content: space-between; align-items: center;">
+                    <span style="font-size: 14px;"><?= h($attachment['name']) ?></span>
+                    <a href="<?= CRM_UPLOAD_URL ?>/<?= h($attachment['path']) ?>" download class="btn btn-sm btn-outline" style="padding: 6px 12px; font-size: 13px;">
+                        📥 다운로드
+                    </a>
+                </div>
+                <?php endforeach; ?>
+            </div>
+        </div>
+        <?php endif; ?>
+
         <!-- 안건 -->
         <?php if (!empty($meeting['agenda'])): ?>
         <div class="detail-section">

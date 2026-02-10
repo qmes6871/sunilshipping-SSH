@@ -55,9 +55,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 
 // POST: 댓글 생성/수정/삭제
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $input = json_decode(file_get_contents('php://input'), true);
-    if (!$input) {
+    // FormData 또는 JSON 요청 처리
+    $contentType = $_SERVER['CONTENT_TYPE'] ?? '';
+    if (strpos($contentType, 'multipart/form-data') !== false) {
         $input = $_POST;
+    } else {
+        $input = json_decode(file_get_contents('php://input'), true);
+        if (!$input) {
+            $input = $_POST;
+        }
     }
     $action = $input['action'] ?? 'create';
 
@@ -70,8 +76,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!$activityId) {
                 errorResponse('활동 ID가 필요합니다.');
             }
-            if (empty($content)) {
-                errorResponse('내용을 입력해주세요.');
+
+            // 이미지 업로드 처리
+            $imagePath = null;
+            $hasImage = isset($_FILES['image']) && $_FILES['image']['error'] === UPLOAD_ERR_OK;
+            if ($hasImage) {
+                $uploadResult = uploadFile($_FILES['image'], 'agricultural/comments', CRM_ALLOWED_IMAGE_TYPES);
+                if ($uploadResult['success']) {
+                    $imagePath = $uploadResult['file_path'];
+                } else {
+                    errorResponse($uploadResult['message'] ?? '이미지 업로드에 실패했습니다.');
+                }
+            }
+
+            // 내용 또는 이미지 중 하나는 있어야 함
+            if (empty($content) && empty($imagePath)) {
+                errorResponse('내용 또는 이미지를 입력해주세요.');
             }
 
             // 부모 댓글의 depth 확인
@@ -87,18 +107,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             try {
                 $stmt = $pdo->prepare("INSERT INTO crm_agri_activity_comments
-                    (activity_id, parent_id, content, depth, created_by, created_at)
-                    VALUES (?, ?, ?, ?, ?, NOW())");
+                    (activity_id, parent_id, content, depth, image, created_by, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, NOW())");
                 $stmt->execute([
                     $activityId,
                     $parentId,
                     $content,
                     $depth,
+                    $imagePath,
                     $currentUser['crm_user_id']
                 ]);
 
                 $newId = $pdo->lastInsertId();
-                successResponse(['id' => $newId], '댓글이 등록되었습니다.');
+                successResponse(['id' => $newId, 'image' => $imagePath], '댓글이 등록되었습니다.');
             } catch (Exception $e) {
                 errorResponse('등록 중 오류가 발생했습니다: ' . $e->getMessage());
             }

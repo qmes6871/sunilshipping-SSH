@@ -79,7 +79,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 // 활동 유형별 상세 정보 JSON
                 $details = [];
-                if ($data['activity_type'] === 'sales') {
+                if ($data['activity_type'] === 'sales' || $data['activity_type'] === 'meeting') {
                     $details = ['meeting_points' => $data['meeting_points'], 'next_action' => $data['next_action']];
                 } elseif ($data['activity_type'] === 'quotation') {
                     $details = ['proposal_price' => $data['proposal_price'], 'proposal_conditions' => $data['proposal_conditions'], 'validity_period' => $data['validity_period']];
@@ -317,7 +317,7 @@ function toggleActivityForms() {
     document.getElementById('quotationForm').classList.add('hidden');
     document.getElementById('contractForm').classList.add('hidden');
 
-    if (activityType === 'sales') {
+    if (activityType === 'sales' || activityType === 'meeting') {
         document.getElementById('salesActivityForm').classList.remove('hidden');
     } else if (activityType === 'quotation') {
         document.getElementById('quotationForm').classList.remove('hidden');

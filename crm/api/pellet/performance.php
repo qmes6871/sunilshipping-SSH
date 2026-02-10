@@ -32,18 +32,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 
 // POST: 성과 등록/수정/삭제
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $action = $_POST['action'] ?? 'create';
+    // JSON 또는 POST 입력 처리
+    $contentType = $_SERVER['CONTENT_TYPE'] ?? '';
+    if (strpos($contentType, 'application/json') !== false) {
+        $input = json_decode(file_get_contents('php://input'), true) ?: [];
+    } else {
+        $input = $_POST;
+    }
+
+    $action = $input['action'] ?? 'create';
 
     switch ($action) {
         case 'create':
-            $year = $_POST['year'] ?? date('Y');
-            $month = $_POST['month'] ?? date('n');
-            $tradeType = trim($_POST['trade_type'] ?? $_POST['business'] ?? $_POST['channel'] ?? '');
-            $actual = floatval($_POST['actual'] ?? 0);
-            $target = floatval($_POST['target'] ?? 0);
-            $note = trim($_POST['note'] ?? '');
-            $unitPrice = floatval($_POST['unit_price'] ?? 0);
-            $quality = floatval($_POST['quality'] ?? 0);
+            $year = $input['year'] ?? date('Y');
+            $month = $input['month'] ?? date('n');
+            $tradeType = trim($input['trade_type'] ?? $input['business'] ?? $input['channel'] ?? '');
+            $actual = floatval($input['actual'] ?? 0);
+            $target = floatval($input['target'] ?? 0);
+            $note = trim($input['note'] ?? '');
+            $unitPrice = floatval($input['unit_price'] ?? 0);
+            $quality = floatval($input['quality'] ?? 0);
 
             if (empty($tradeType)) {
                 errorResponse('판매 채널을 선택해주세요.');
@@ -72,7 +80,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             break;
 
         case 'update':
-            $id = $_POST['id'] ?? null;
+            $id = $input['id'] ?? null;
             if (!$id) {
                 errorResponse('ID가 필요합니다.');
             }
@@ -83,12 +91,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     note = ?, updated_at = NOW()
                     WHERE id = ?");
                 $stmt->execute([
-                    $_POST['year'] ?? date('Y'),
-                    $_POST['month'] ?? date('n'),
-                    trim($_POST['trade_type'] ?? ''),
-                    floatval($_POST['actual'] ?? 0),
-                    floatval($_POST['target'] ?? 0),
-                    trim($_POST['note'] ?? ''),
+                    $input['year'] ?? date('Y'),
+                    $input['month'] ?? date('n'),
+                    trim($input['trade_type'] ?? ''),
+                    floatval($input['actual'] ?? 0),
+                    floatval($input['target'] ?? 0),
+                    trim($input['note'] ?? ''),
                     $id
                 ]);
 
@@ -99,7 +107,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             break;
 
         case 'delete':
-            $id = $_POST['id'] ?? null;
+            $id = $input['id'] ?? null;
             if (!$id) {
                 errorResponse('ID가 필요합니다.');
             }

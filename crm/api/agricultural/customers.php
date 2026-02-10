@@ -158,7 +158,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             try {
                 $pdo->beginTransaction();
 
-                // 관련 활동 삭제
+                // 관련 활동 ID 조회
+                $stmt = $pdo->prepare("SELECT id FROM " . CRM_AGRI_ACTIVITIES_TABLE . " WHERE customer_id = ?");
+                $stmt->execute([$id]);
+                $activityIds = $stmt->fetchAll(PDO::FETCH_COLUMN, 0);
+
+                // 관련 활동 댓글 삭제
+                if (!empty($activityIds)) {
+                    $placeholders = implode(',', array_fill(0, count($activityIds), '?'));
+                    $stmt = $pdo->prepare("DELETE FROM crm_agri_activity_comments WHERE activity_id IN ({$placeholders})");
+                    $stmt->execute($activityIds);
+                }
+
+                // 관련 활동 삭제 (CASCADE로 자동 삭제될 수 있지만 명시적으로 삭제)
                 $stmt = $pdo->prepare("DELETE FROM " . CRM_AGRI_ACTIVITIES_TABLE . " WHERE customer_id = ?");
                 $stmt->execute([$id]);
 
@@ -166,11 +178,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt = $pdo->prepare("DELETE FROM " . CRM_AGRI_CUSTOMERS_TABLE . " WHERE id = ?");
                 $stmt->execute([$id]);
 
+                if ($stmt->rowCount() === 0) {
+                    $pdo->rollBack();
+                    errorResponse('해당 고객을 찾을 수 없습니다.');
+                }
+
                 $pdo->commit();
                 successResponse(null, '고객이 삭제되었습니다.');
             } catch (Exception $e) {
                 $pdo->rollBack();
-                errorResponse('삭제 중 오류가 발생했습니다.');
+                error_log("Agricultural customer delete error: " . $e->getMessage());
+                errorResponse('삭제 중 오류가 발생했습니다: ' . $e->getMessage());
             }
             break;
 

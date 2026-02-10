@@ -32,18 +32,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 
 // POST: 성과 등록/수정/삭제
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $action = $_POST['action'] ?? 'create';
+    // JSON 또는 POST 입력 처리
+    $contentType = $_SERVER['CONTENT_TYPE'] ?? '';
+    if (strpos($contentType, 'application/json') !== false) {
+        $input = json_decode(file_get_contents('php://input'), true) ?: [];
+    } else {
+        $input = $_POST;
+    }
+
+    $action = $input['action'] ?? 'create';
 
     switch ($action) {
         case 'create':
-            $year = $_POST['year'] ?? date('Y');
-            $month = $_POST['month'] ?? date('n');
-            $business = trim($_POST['business'] ?? '');
-            $actual = floatval($_POST['actual'] ?? 0);
-            $target = floatval($_POST['target'] ?? 0);
-            $freshness = !empty($_POST['freshness']) ? floatval($_POST['freshness']) : null;
-            $quality = !empty($_POST['quality']) ? floatval($_POST['quality']) : null;
-            $note = trim($_POST['note'] ?? '');
+            $year = $input['year'] ?? date('Y');
+            $month = $input['month'] ?? date('n');
+            $business = trim($input['business'] ?? '');
+            $actual = floatval($input['actual'] ?? 0);
+            $target = floatval($input['target'] ?? 0);
+            $freshness = !empty($input['freshness']) ? floatval($input['freshness']) : null;
+            $quality = !empty($input['quality']) ? floatval($input['quality']) : null;
+            $note = trim($input['note'] ?? '');
 
             if (empty($business)) {
                 errorResponse('사업 구분을 선택해주세요.');
@@ -74,7 +82,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             break;
 
         case 'update':
-            $id = $_POST['id'] ?? null;
+            $id = $input['id'] ?? null;
             if (!$id) {
                 errorResponse('ID가 필요합니다.');
             }
@@ -85,14 +93,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     freshness = ?, quality = ?, note = ?, updated_at = NOW()
                     WHERE id = ?");
                 $stmt->execute([
-                    $_POST['year'] ?? date('Y'),
-                    $_POST['month'] ?? date('n'),
-                    trim($_POST['business'] ?? ''),
-                    floatval($_POST['actual'] ?? 0),
-                    floatval($_POST['target'] ?? 0),
-                    !empty($_POST['freshness']) ? floatval($_POST['freshness']) : null,
-                    !empty($_POST['quality']) ? floatval($_POST['quality']) : null,
-                    trim($_POST['note'] ?? ''),
+                    $input['year'] ?? date('Y'),
+                    $input['month'] ?? date('n'),
+                    trim($input['business'] ?? ''),
+                    floatval($input['actual'] ?? 0),
+                    floatval($input['target'] ?? 0),
+                    !empty($input['freshness']) ? floatval($input['freshness']) : null,
+                    !empty($input['quality']) ? floatval($input['quality']) : null,
+                    trim($input['note'] ?? ''),
                     $id
                 ]);
 
@@ -103,7 +111,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             break;
 
         case 'delete':
-            $id = $_POST['id'] ?? null;
+            $id = $input['id'] ?? null;
             if (!$id) {
                 errorResponse('ID가 필요합니다.');
             }

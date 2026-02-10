@@ -10,8 +10,8 @@ $pageSubtitle = '부서별 실적 데이터 입력';
 
 $pdo = getDB();
 
-// 지역 목록
-$regions = ['쿠잔트', '알마티', '리비아', '두바이', '카자흐스탄', '우즈베키스탄'];
+// 지역 목록 (동적 로드)
+$regions = getIntlRegions();
 
 // 기존 성과 조회
 $year = $_GET['year'] ?? date('Y');

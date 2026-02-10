@@ -195,12 +195,23 @@ include dirname(dirname(__DIR__)) . '/includes/header.php';
             <!-- 첨부파일 -->
             <div class="form-group">
                 <label class="form-label">첨부파일</label>
-                <?php if (!empty($warning['attachment_path'])): ?>
-                    <p style="margin-bottom: 8px; color: #666; font-size: 13px;">
-                        현재 파일: <a href="<?= CRM_UPLOAD_URL ?>/<?= h($warning['attachment_path']) ?>" target="_blank" style="color: #4a90e2;">다운로드</a>
-                    </p>
+                <?php if (!empty($warning['attachment_path'])):
+                    $ext = strtolower(pathinfo($warning['attachment_path'], PATHINFO_EXTENSION));
+                    $isImage = in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp']);
+                ?>
+                    <div style="margin-bottom: 12px; padding: 12px; background: #f8f9fa; border-radius: 8px;">
+                        <?php if ($isImage): ?>
+                            <div style="margin-bottom: 8px;">
+                                <img src="<?= CRM_UPLOAD_URL ?>/<?= h($warning['attachment_path']) ?>" style="max-width: 100%; max-height: 200px; border-radius: 6px; cursor: pointer;" onclick="window.open('<?= CRM_UPLOAD_URL ?>/<?= h($warning['attachment_path']) ?>', '_blank')" />
+                            </div>
+                        <?php endif; ?>
+                        <p style="color: #666; font-size: 13px; display: flex; align-items: center; gap: 8px;">
+                            <span>현재 파일:</span>
+                            <a href="<?= CRM_UPLOAD_URL ?>/<?= h($warning['attachment_path']) ?>" target="_blank" style="color: #4a90e2;"><?= basename($warning['attachment_path']) ?></a>
+                        </p>
+                    </div>
                 <?php endif; ?>
-                <input type="file" name="attachment" class="form-file">
+                <input type="file" name="attachment" class="form-file" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx">
                 <div class="form-help">PDF, DOC, XLS, 이미지 파일 등을 첨부할 수 있습니다 (최대 10MB)</div>
             </div>
 

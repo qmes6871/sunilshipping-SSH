@@ -65,11 +65,12 @@ $offset = ($page - 1) * $perPage;
 
 // 공지 목록 조회
 try {
+    // 미확인 공지 우선 정렬: is_read 0/NULL → is_important → created_at
     $stmt = $pdo->prepare("SELECT n.*, u.name as creator_name
         FROM " . CRM_NOTICES_TABLE . " n
         LEFT JOIN " . CRM_USERS_TABLE . " u ON n.created_by = u.id
         WHERE {$whereClause}
-        ORDER BY n.is_important DESC, n.created_at DESC
+        ORDER BY COALESCE(n.is_read, 0) ASC, n.is_important DESC, n.created_at DESC
         LIMIT {$perPage} OFFSET {$offset}");
     $stmt->execute($params);
     $notices = $stmt->fetchAll();

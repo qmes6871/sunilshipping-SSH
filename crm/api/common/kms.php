@@ -145,10 +145,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
 
                 // 첨부파일 처리
-                if (in_array('attachment_path', $columns) && !empty($_FILES['attachment']['name'])) {
+                if (in_array('attachment_path', $columns) && isset($_FILES['attachment']) && $_FILES['attachment']['error'] === UPLOAD_ERR_OK) {
                     $uploadDir = dirname(dirname(__DIR__)) . '/uploads/kms/';
                     if (!is_dir($uploadDir)) {
-                        mkdir($uploadDir, 0755, true);
+                        mkdir($uploadDir, 0777, true);
                     }
                     $fileName = time() . '_' . basename($_FILES['attachment']['name']);
                     $targetPath = $uploadDir . $fileName;
@@ -156,6 +156,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $insertCols[] = 'attachment_path';
                         $insertVals[] = '?';
                         $insertParams[] = 'kms/' . $fileName;
+                    } else {
+                        error_log("KMS file upload failed: " . $targetPath);
                     }
                 }
 
@@ -234,16 +236,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
 
                 // 첨부파일 처리
-                if (in_array('attachment_path', $columns) && !empty($_FILES['attachment']['name'])) {
+                if (in_array('attachment_path', $columns) && isset($_FILES['attachment']) && $_FILES['attachment']['error'] === UPLOAD_ERR_OK) {
                     $uploadDir = dirname(dirname(__DIR__)) . '/uploads/kms/';
                     if (!is_dir($uploadDir)) {
-                        mkdir($uploadDir, 0755, true);
+                        mkdir($uploadDir, 0777, true);
                     }
                     $fileName = time() . '_' . basename($_FILES['attachment']['name']);
                     $targetPath = $uploadDir . $fileName;
                     if (move_uploaded_file($_FILES['attachment']['tmp_name'], $targetPath)) {
                         $updateParts[] = 'attachment_path = ?';
                         $updateParams[] = 'kms/' . $fileName;
+                    } else {
+                        error_log("KMS file upload failed (update): " . $targetPath);
                     }
                 }
 

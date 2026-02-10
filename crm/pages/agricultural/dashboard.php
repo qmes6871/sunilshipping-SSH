@@ -86,27 +86,39 @@ $offset = ($page - 1) * $perPage;
 
 // 바이어 목록 조회 (최신 댓글 포함 - 활동을 통해 조회)
 try {
-    $stmt = $pdo->prepare("SELECT c.*,
-        (SELECT COUNT(*) FROM crm_agri_activity_comments cm
-         INNER JOIN " . CRM_AGRI_ACTIVITIES_TABLE . " a ON cm.activity_id = a.id
-         WHERE a.customer_id = c.id) as comment_count,
-        (SELECT cm.content FROM crm_agri_activity_comments cm
-         INNER JOIN " . CRM_AGRI_ACTIVITIES_TABLE . " a ON cm.activity_id = a.id
-         WHERE a.customer_id = c.id
-         ORDER BY cm.created_at DESC LIMIT 1) as latest_comment,
-        (SELECT cm.created_at FROM crm_agri_activity_comments cm
-         INNER JOIN " . CRM_AGRI_ACTIVITIES_TABLE . " a ON cm.activity_id = a.id
-         WHERE a.customer_id = c.id
-         ORDER BY cm.created_at DESC LIMIT 1) as comment_date,
-        (SELECT u.name FROM crm_agri_activity_comments cm
-         INNER JOIN " . CRM_AGRI_ACTIVITIES_TABLE . " a ON cm.activity_id = a.id
-         LEFT JOIN " . CRM_USERS_TABLE . " u ON cm.created_by = u.id
-         WHERE a.customer_id = c.id
-         ORDER BY cm.created_at DESC LIMIT 1) as comment_author
-        FROM " . CRM_AGRI_CUSTOMERS_TABLE . " c
-        WHERE {$whereClause}
-        ORDER BY c.created_at DESC
-        LIMIT {$perPage} OFFSET {$offset}");
+    // 활동 테이블과 댓글 테이블 존재 여부 확인
+    $actTableExists = $pdo->query("SHOW TABLES LIKE '" . CRM_AGRI_ACTIVITIES_TABLE . "'")->fetch();
+    $cmtTableExists = $pdo->query("SHOW TABLES LIKE 'crm_agri_activity_comments'")->fetch();
+
+    if ($actTableExists && $cmtTableExists) {
+        $stmt = $pdo->prepare("SELECT c.*,
+            (SELECT COUNT(*) FROM crm_agri_activity_comments cm
+             INNER JOIN " . CRM_AGRI_ACTIVITIES_TABLE . " a ON cm.activity_id = a.id
+             WHERE a.customer_id = c.id) as comment_count,
+            (SELECT cm.content FROM crm_agri_activity_comments cm
+             INNER JOIN " . CRM_AGRI_ACTIVITIES_TABLE . " a ON cm.activity_id = a.id
+             WHERE a.customer_id = c.id
+             ORDER BY cm.created_at DESC LIMIT 1) as latest_comment,
+            (SELECT cm.created_at FROM crm_agri_activity_comments cm
+             INNER JOIN " . CRM_AGRI_ACTIVITIES_TABLE . " a ON cm.activity_id = a.id
+             WHERE a.customer_id = c.id
+             ORDER BY cm.created_at DESC LIMIT 1) as comment_date,
+            (SELECT u.name FROM crm_agri_activity_comments cm
+             INNER JOIN " . CRM_AGRI_ACTIVITIES_TABLE . " a ON cm.activity_id = a.id
+             LEFT JOIN " . CRM_USERS_TABLE . " u ON cm.created_by = u.id
+             WHERE a.customer_id = c.id
+             ORDER BY cm.created_at DESC LIMIT 1) as comment_author
+            FROM " . CRM_AGRI_CUSTOMERS_TABLE . " c
+            WHERE {$whereClause}
+            ORDER BY c.created_at DESC
+            LIMIT {$perPage} OFFSET {$offset}");
+    } else {
+        $stmt = $pdo->prepare("SELECT c.*, 0 as comment_count, NULL as latest_comment, NULL as comment_date, NULL as comment_author
+            FROM " . CRM_AGRI_CUSTOMERS_TABLE . " c
+            WHERE {$whereClause}
+            ORDER BY c.created_at DESC
+            LIMIT {$perPage} OFFSET {$offset}");
+    }
     $stmt->execute($params);
     $customers = $stmt->fetchAll();
 } catch (Exception $e) {

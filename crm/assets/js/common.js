@@ -2,8 +2,96 @@
  * CRM 공통 JavaScript
  */
 
-// CRM URL
-const CRM_URL = window.CRM_URL || '/crm';
+// CRM URL (header.php에서 설정된 값 사용)
+// window.CRM_URL은 header.php에서 설정됨
+
+// API POST 요청
+async function apiPost(url, data) {
+    try {
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(data)
+        });
+        return await response.json();
+    } catch (error) {
+        console.error('API Error:', error);
+        return { success: false, message: '서버 오류가 발생했습니다.' };
+    }
+}
+
+// API GET 요청
+async function apiGet(url) {
+    try {
+        const response = await fetch(url);
+        return await response.json();
+    } catch (error) {
+        console.error('API Error:', error);
+        return { success: false, message: '서버 오류가 발생했습니다.' };
+    }
+}
+
+// 토스트 메시지 표시
+function showToast(message, type = 'info') {
+    // 기존 토스트 제거
+    const existingToast = document.querySelector('.toast-message');
+    if (existingToast) {
+        existingToast.remove();
+    }
+
+    // 토스트 생성
+    const toast = document.createElement('div');
+    toast.className = 'toast-message toast-' + type;
+    toast.textContent = message;
+    toast.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        padding: 16px 24px;
+        border-radius: 8px;
+        color: white;
+        font-size: 14px;
+        font-weight: 500;
+        z-index: 9999;
+        animation: slideIn 0.3s ease;
+        max-width: 400px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    `;
+
+    // 타입별 색상
+    const colors = {
+        success: '#28a745',
+        error: '#dc3545',
+        warning: '#ffc107',
+        info: '#17a2b8'
+    };
+    toast.style.background = colors[type] || colors.info;
+    if (type === 'warning') toast.style.color = '#212529';
+
+    document.body.appendChild(toast);
+
+    // 3초 후 제거
+    setTimeout(() => {
+        toast.style.animation = 'slideOut 0.3s ease';
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+}
+
+// 토스트 애니메이션 스타일 추가
+const toastStyle = document.createElement('style');
+toastStyle.textContent = `
+    @keyframes slideIn {
+        from { transform: translateX(100%); opacity: 0; }
+        to { transform: translateX(0); opacity: 1; }
+    }
+    @keyframes slideOut {
+        from { transform: translateX(0); opacity: 1; }
+        to { transform: translateX(100%); opacity: 0; }
+    }
+`;
+document.head.appendChild(toastStyle);
 
 // 사이드바 토글
 function toggleSidebar() {

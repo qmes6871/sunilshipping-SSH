@@ -39,16 +39,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 
 // POST: 개인실적 등록/수정/삭제
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $action = $_POST['action'] ?? 'create';
+    // JSON 또는 POST 입력 처리
+    $contentType = $_SERVER['CONTENT_TYPE'] ?? '';
+    if (strpos($contentType, 'application/json') !== false) {
+        $input = json_decode(file_get_contents('php://input'), true) ?: [];
+    } else {
+        $input = $_POST;
+    }
+
+    $action = $input['action'] ?? 'create';
 
     switch ($action) {
         case 'create':
-            $year = $_POST['year'] ?? date('Y');
-            $month = $_POST['month'] ?? date('n');
-            $itemName = trim($_POST['item_name'] ?? $_POST['crop'] ?? '');
-            $targetAmount = floatval($_POST['target_amount'] ?? $_POST['target'] ?? 0);
-            $actualAmount = floatval($_POST['actual_amount'] ?? $_POST['actual'] ?? 0);
-            $notes = trim($_POST['notes'] ?? '');
+            $year = $input['year'] ?? date('Y');
+            $month = $input['month'] ?? date('n');
+            $itemName = trim($input['item_name'] ?? $input['crop'] ?? '');
+            $targetAmount = floatval($input['target_amount'] ?? $input['target'] ?? 0);
+            $actualAmount = floatval($input['actual_amount'] ?? $input['actual'] ?? 0);
+            $notes = trim($input['notes'] ?? '');
 
             // 달성률 계산
             $achievementRate = $targetAmount > 0 ? round(($actualAmount / $targetAmount) * 100, 2) : 0;
@@ -91,13 +99,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             break;
 
         case 'update':
-            $id = $_POST['id'] ?? null;
+            $id = $input['id'] ?? null;
             if (!$id) {
                 errorResponse('ID가 필요합니다.');
             }
 
-            $targetAmount = floatval($_POST['target_amount'] ?? 0);
-            $actualAmount = floatval($_POST['actual_amount'] ?? 0);
+            $targetAmount = floatval($input['target_amount'] ?? 0);
+            $actualAmount = floatval($input['actual_amount'] ?? 0);
             $achievementRate = $targetAmount > 0 ? round(($actualAmount / $targetAmount) * 100, 2) : 0;
 
             try {
@@ -106,13 +114,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     actual_amount = ?, achievement_rate = ?, notes = ?, updated_at = NOW()
                     WHERE id = ?");
                 $stmt->execute([
-                    $_POST['year'] ?? date('Y'),
-                    $_POST['month'] ?? date('n'),
-                    trim($_POST['item_name'] ?? ''),
+                    $input['year'] ?? date('Y'),
+                    $input['month'] ?? date('n'),
+                    trim($input['item_name'] ?? ''),
                     $targetAmount,
                     $actualAmount,
                     $achievementRate,
-                    trim($_POST['notes'] ?? ''),
+                    trim($input['notes'] ?? ''),
                     $id
                 ]);
 
@@ -123,7 +131,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             break;
 
         case 'delete':
-            $id = $_POST['id'] ?? null;
+            $id = $input['id'] ?? null;
             if (!$id) {
                 errorResponse('ID가 필요합니다.');
             }

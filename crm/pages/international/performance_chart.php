@@ -15,9 +15,17 @@ $year = $_GET['year'] ?? date('Y');
 $month = $_GET['month'] ?? date('n');
 $periodType = $_GET['period_type'] ?? 'monthly';
 
-// 부서별 성과 조회
-$regions = ['쿠잔트', '알마티', '리비아', '두바이', '카자흐스탄', '우즈베키스탄'];
-$targets = ['쿠잔트' => 250, '알마티' => 250, '리비아' => 250, '두바이' => 200, '카자흐스탄' => 220, '우즈베키스탄' => 230];
+// 부서별 성과 조회 (동적 지역 목록 사용)
+$regions = getIntlRegions();
+
+// 지역별 목표 가져오기 (설정에 저장된 목표값 사용, 없으면 기본값 200)
+$targetsJson = getSetting('intl_region_targets');
+$targets = $targetsJson ? json_decode($targetsJson, true) : [];
+foreach ($regions as $region) {
+    if (!isset($targets[$region])) {
+        $targets[$region] = 200; // 기본 목표
+    }
+}
 $performanceData = [];
 
 try {
@@ -491,7 +499,7 @@ include dirname(dirname(__DIR__)) . '/includes/header.php';
     </div>
 
     <!-- 통계 요약 -->
-    <div class="stats-summary">
+    <div class="stats-summary" style="grid-template-columns: repeat(2, 1fr);">
         <div class="stat-box">
             <div class="stat-label">총 수출 건수</div>
             <div class="stat-value"><?= number_format($totalCount) ?>건</div>
@@ -501,16 +509,6 @@ include dirname(dirname(__DIR__)) . '/includes/header.php';
             <div class="stat-label">목표 달성률</div>
             <div class="stat-value"><?= $achievementRate ?>%</div>
             <div class="stat-change up">▲ 5.2% 전월 대비</div>
-        </div>
-        <div class="stat-box">
-            <div class="stat-label">평균 처리 시간</div>
-            <div class="stat-value">3.2일</div>
-            <div class="stat-change down">▼ 0.5일 단축</div>
-        </div>
-        <div class="stat-box">
-            <div class="stat-label">고객 만족도</div>
-            <div class="stat-value">92%</div>
-            <div class="stat-change up">▲ 3.1% 전월 대비</div>
         </div>
     </div>
 
@@ -697,7 +695,9 @@ document.querySelectorAll('.filter-left .filter-btn').forEach(btn => {
 
 // 탭 버튼 클릭 (차트 보기 / 테이블 보기)
 const chartContainer = document.querySelector('.chart-container');
-const tableContainer = document.querySelector('.data-table')?.closest('.card:not(:first-child)');
+const detailCards = document.querySelectorAll('.container > .card');
+const detailTableCard = detailCards.length > 1 ? detailCards[1] : null; // 상세 실적 데이터 테이블 카드
+
 document.querySelectorAll('.tab-btn').forEach((btn, index) => {
     btn.addEventListener('click', function() {
         document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -706,12 +706,17 @@ document.querySelectorAll('.tab-btn').forEach((btn, index) => {
         if (index === 0) {
             // 차트 보기
             if (chartContainer) chartContainer.style.display = 'block';
+            if (detailTableCard) detailTableCard.style.display = 'none';
         } else {
             // 테이블 보기
             if (chartContainer) chartContainer.style.display = 'none';
+            if (detailTableCard) detailTableCard.style.display = 'block';
         }
     });
 });
+
+// 초기 상태: 차트 보기
+if (detailTableCard) detailTableCard.style.display = 'none';
 </script>
 SCRIPT;
 

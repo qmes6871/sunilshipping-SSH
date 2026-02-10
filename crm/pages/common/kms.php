@@ -269,6 +269,35 @@ async function viewDocument(id) {
         const classLabels = {guide: '가이드', checklist: '체크리스트', check: '체크리스트', notice: '공지'};
 
         document.getElementById('docTitle').textContent = doc.title;
+
+        // 첨부파일 표시 (이미지면 미리보기, 아니면 다운로드 링크)
+        let attachmentHtml = '';
+        if (doc.attachment_path) {
+            const fileUrl = CRM_UPLOAD_URL + '/' + doc.attachment_path;
+            const ext = doc.attachment_path.split('.').pop().toLowerCase();
+            const imageExts = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'];
+
+            if (imageExts.includes(ext)) {
+                attachmentHtml = `
+                    <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid #eee;">
+                        <div style="font-size: 13px; color: #666; margin-bottom: 8px; font-weight: 600;">첨부 이미지</div>
+                        <img src="\${fileUrl}" style="max-width: 100%; border-radius: 8px; cursor: pointer;" onclick="window.open('\${fileUrl}', '_blank')" />
+                    </div>
+                `;
+            } else {
+                const fileName = doc.attachment_path.split('/').pop();
+                attachmentHtml = `
+                    <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid #eee;">
+                        <div style="font-size: 13px; color: #666; margin-bottom: 8px; font-weight: 600;">첨부파일</div>
+                        <a href="\${fileUrl}" target="_blank" download style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; background: #f5f5f5; border-radius: 6px; color: #333; text-decoration: none;">
+                            <span style="font-size: 16px;">📎</span>
+                            <span>\${fileName}</span>
+                        </a>
+                    </div>
+                `;
+            }
+        }
+
         document.getElementById('docContent').innerHTML = `
             <div style="margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid #eee; display: flex; gap: 12px; flex-wrap: wrap;">
                 <span style="background: #f0f0f0; padding: 4px 10px; border-radius: 12px; font-size: 13px;">
@@ -282,6 +311,7 @@ async function viewDocument(id) {
                 </span>
             </div>
             <div style="line-height: 1.8; white-space: pre-wrap;">\${doc.content || '(내용 없음)'}</div>
+            \${attachmentHtml}
         `;
 
         openModal('docModal');

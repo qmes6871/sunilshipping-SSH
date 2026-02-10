@@ -125,13 +125,24 @@ a { text-decoration: none; color: inherit; }
 
                     <div>
                         <label class="label" for="files">첨부파일</label>
-                        <?php if (!empty($doc['attachment_path'])): ?>
-                            <p style="margin-bottom: 8px; color: #666; font-size: 13px;">
-                                현재 파일: <a href="<?= CRM_UPLOAD_URL ?>/<?= h($doc['attachment_path']) ?>" target="_blank" style="color: #0d6efd;">다운로드</a>
-                            </p>
+                        <?php if (!empty($doc['attachment_path'])):
+                            $ext = strtolower(pathinfo($doc['attachment_path'], PATHINFO_EXTENSION));
+                            $isImage = in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp']);
+                        ?>
+                            <div style="margin-bottom: 12px; padding: 12px; background: #f8f9fa; border-radius: 8px;">
+                                <?php if ($isImage): ?>
+                                    <div style="margin-bottom: 8px;">
+                                        <img src="<?= CRM_UPLOAD_URL ?>/<?= h($doc['attachment_path']) ?>" style="max-width: 100%; max-height: 200px; border-radius: 6px; cursor: pointer;" onclick="window.open('<?= CRM_UPLOAD_URL ?>/<?= h($doc['attachment_path']) ?>', '_blank')" />
+                                    </div>
+                                <?php endif; ?>
+                                <p style="color: #666; font-size: 13px; display: flex; align-items: center; gap: 8px;">
+                                    <span>현재 파일:</span>
+                                    <a href="<?= CRM_UPLOAD_URL ?>/<?= h($doc['attachment_path']) ?>" target="_blank" style="color: #0d6efd;"><?= basename($doc['attachment_path']) ?></a>
+                                </p>
+                            </div>
                         <?php endif; ?>
-                        <input type="file" class="file" id="files" name="attachment" />
-                        <div class="help">여러 파일을 동시에 선택할 수 있습니다.</div>
+                        <input type="file" class="file" id="files" name="attachment" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt" />
+                        <div class="help">이미지, PDF, Office 문서 등을 첨부할 수 있습니다.</div>
                     </div>
 
                     <div class="actions">

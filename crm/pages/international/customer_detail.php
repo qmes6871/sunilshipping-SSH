@@ -378,6 +378,65 @@ include dirname(dirname(__DIR__)) . '/includes/header.php';
         margin-left: 4px;
     }
 
+    /* 활동 상세 내용 */
+    .activity-detail {
+        display: none;
+        padding: 16px;
+        background: #f0f4ff;
+        border-top: 2px solid #0d6efd;
+    }
+
+    .activity-detail.show { display: block; }
+
+    .activity-detail-grid {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 12px;
+    }
+
+    .activity-detail-field {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+
+    .activity-detail-label {
+        font-size: 12px;
+        font-weight: 600;
+        color: #0d6efd;
+    }
+
+    .activity-detail-value {
+        padding: 10px 12px;
+        background: white;
+        border-radius: 6px;
+        font-size: 13px;
+        color: #212529;
+        line-height: 1.6;
+        white-space: pre-wrap;
+        word-break: break-word;
+    }
+
+    .activity-detail-value.empty {
+        color: #adb5bd;
+        font-style: italic;
+    }
+
+    .booking-detail-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+        margin-top: 8px;
+    }
+
+    .booking-detail-grid .activity-detail-field.full-width {
+        grid-column: 1 / -1;
+    }
+
+    @media (max-width: 768px) {
+        .booking-detail-grid { grid-template-columns: 1fr; }
+    }
+
     .activity-comments {
         display: none;
         padding: 16px;
@@ -848,6 +907,106 @@ include dirname(dirname(__DIR__)) . '/includes/header.php';
                         </div>
                     </div>
 
+                    <div class="activity-detail" id="detail-<?= $activity['id'] ?>">
+                        <div class="activity-detail-grid">
+                            <?php if (!empty($activity['meeting_purpose'])): ?>
+                            <div class="activity-detail-field">
+                                <span class="activity-detail-label">미팅목적</span>
+                                <div class="activity-detail-value"><?= nl2br(h($activity['meeting_purpose'])) ?></div>
+                            </div>
+                            <?php endif; ?>
+
+                            <?php if (!empty($activity['activity_content'])): ?>
+                            <div class="activity-detail-field">
+                                <span class="activity-detail-label">내용</span>
+                                <div class="activity-detail-value"><?= nl2br(h($activity['activity_content'])) ?></div>
+                            </div>
+                            <?php endif; ?>
+
+                            <?php if (!empty($activity['activity_result'])): ?>
+                            <div class="activity-detail-field">
+                                <span class="activity-detail-label">결과</span>
+                                <div class="activity-detail-value"><?= nl2br(h($activity['activity_result'])) ?></div>
+                            </div>
+                            <?php endif; ?>
+
+                            <?php if (!empty($activity['followup_items'])): ?>
+                            <div class="activity-detail-field">
+                                <span class="activity-detail-label">후속조치</span>
+                                <div class="activity-detail-value"><?= nl2br(h($activity['followup_items'])) ?></div>
+                            </div>
+                            <?php endif; ?>
+
+                            <?php
+                            // 부킹완료 상세 정보
+                            $bookingDetails = null;
+                            if (!empty($activity['details'])) {
+                                $bookingDetails = json_decode($activity['details'], true);
+                            }
+                            if ($activity['activity_type'] === 'booking_completed' && $bookingDetails): ?>
+                            <div class="activity-detail-field">
+                                <span class="activity-detail-label">부킹 상세 정보</span>
+                                <div class="booking-detail-grid">
+                                    <?php if (!empty($bookingDetails['buyer_name'])): ?>
+                                    <div class="activity-detail-field">
+                                        <span class="activity-detail-label" style="color: #495057;">바이어</span>
+                                        <div class="activity-detail-value"><?= h($bookingDetails['buyer_name']) ?></div>
+                                    </div>
+                                    <?php endif; ?>
+                                    <?php if (!empty($bookingDetails['destination'])): ?>
+                                    <div class="activity-detail-field">
+                                        <span class="activity-detail-label" style="color: #495057;">목적지</span>
+                                        <div class="activity-detail-value"><?= h($bookingDetails['destination']) ?></div>
+                                    </div>
+                                    <?php endif; ?>
+                                    <?php if (!empty($bookingDetails['container_type'])): ?>
+                                    <div class="activity-detail-field">
+                                        <span class="activity-detail-label" style="color: #495057;">컨테이너</span>
+                                        <div class="activity-detail-value"><?= h($bookingDetails['container_type']) ?></div>
+                                    </div>
+                                    <?php endif; ?>
+                                    <?php if (!empty($bookingDetails['loading_place'])): ?>
+                                    <div class="activity-detail-field">
+                                        <span class="activity-detail-label" style="color: #495057;">쇼링장/DOOR</span>
+                                        <div class="activity-detail-value"><?= h($bookingDetails['loading_place']) ?></div>
+                                    </div>
+                                    <?php endif; ?>
+                                    <?php if (!empty($bookingDetails['expected_date'])): ?>
+                                    <div class="activity-detail-field">
+                                        <span class="activity-detail-label" style="color: #495057;">작업 예상일</span>
+                                        <div class="activity-detail-value"><?= h($bookingDetails['expected_date']) ?></div>
+                                    </div>
+                                    <?php endif; ?>
+                                    <?php if (!empty($bookingDetails['freight_offer'])): ?>
+                                    <div class="activity-detail-field">
+                                        <span class="activity-detail-label" style="color: #495057;">운임 오퍼</span>
+                                        <div class="activity-detail-value"><?= h($bookingDetails['freight_offer']) ?></div>
+                                    </div>
+                                    <?php endif; ?>
+                                    <?php if (!empty($bookingDetails['cargo_items'])): ?>
+                                    <div class="activity-detail-field full-width">
+                                        <span class="activity-detail-label" style="color: #495057;">적입 아이템</span>
+                                        <div class="activity-detail-value"><?= nl2br(h($bookingDetails['cargo_items'])) ?></div>
+                                    </div>
+                                    <?php endif; ?>
+                                    <?php if (!empty($bookingDetails['booking_notes'])): ?>
+                                    <div class="activity-detail-field full-width">
+                                        <span class="activity-detail-label" style="color: #495057;">기타</span>
+                                        <div class="activity-detail-value"><?= nl2br(h($bookingDetails['booking_notes'])) ?></div>
+                                    </div>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+                            <?php endif; ?>
+
+                            <?php if (empty($activity['meeting_purpose']) && empty($activity['activity_content']) && empty($activity['activity_result']) && empty($activity['followup_items']) && !$bookingDetails): ?>
+                            <div class="activity-detail-field">
+                                <div class="activity-detail-value empty">등록된 상세 내용이 없습니다.</div>
+                            </div>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+
                     <div class="activity-comments" id="comments-<?= $activity['id'] ?>">
                         <div class="activity-comments-title">댓글 (<?= count($comments) ?>)</div>
                         <div class="comment-input-area">
@@ -947,8 +1106,10 @@ function restoreOpenActivity() {
         const activityItem = document.querySelector('.activity-item[data-activity-id="' + activityId + '"]');
         if (activityItem) {
             const wrapper = activityItem.closest('.activity-item-wrapper');
+            const detailSection = wrapper.querySelector('.activity-detail');
             const commentSection = wrapper.querySelector('.activity-comments');
             activityItem.classList.add('selected');
+            if (detailSection) detailSection.classList.add('show');
             commentSection.classList.add('show');
         }
     }
@@ -972,15 +1133,18 @@ document.querySelectorAll('.activity-item').forEach(item => {
     item.addEventListener('click', function(e) {
         if (e.target.closest('.comment-action-btn')) return;
         const wrapper = this.closest('.activity-item-wrapper');
+        const detailSection = wrapper.querySelector('.activity-detail');
         const commentSection = wrapper.querySelector('.activity-comments');
-        const isOpen = commentSection.classList.contains('show');
+        const isOpen = detailSection ? detailSection.classList.contains('show') : commentSection.classList.contains('show');
         const activityId = this.dataset.activityId;
 
         document.querySelectorAll('.activity-item').forEach(ai => ai.classList.remove('selected'));
+        document.querySelectorAll('.activity-detail').forEach(ad => ad.classList.remove('show'));
         document.querySelectorAll('.activity-comments').forEach(ac => ac.classList.remove('show'));
 
         if (!isOpen) {
             this.classList.add('selected');
+            if (detailSection) detailSection.classList.add('show');
             commentSection.classList.add('show');
             saveOpenActivity(activityId);
         } else {

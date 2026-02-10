@@ -23,8 +23,9 @@ $searchExportCountry = $_GET['export_country'] ?? '';
 $page = max(1, intval($_GET['page'] ?? 1));
 $perPage = 20;
 
-// 지역 목록
-$regions = ['쿠잔트', '알마티', '타쉬켄트', '리비아', '알제리', '튀니지', '이집트', '모로코', '기타'];
+// 지역 목록 (설정에서 가져오기)
+$regions = getIntlRegions();
+$countries = getIntlCountries();
 
 // 월별 성과 데이터 조회
 $monthlyData = [];
@@ -339,9 +340,14 @@ include dirname(dirname(__DIR__)) . '/includes/header.php';
     }
 </style>
 
-<div class="page-header">
-    <div class="page-title">국제물류 대시보드</div>
-    <div class="page-subtitle">실시간 물류 현황 및 성과 확인</div>
+<div class="page-header" style="display: flex; justify-content: space-between; align-items: flex-start;">
+    <div>
+        <div class="page-title">국제물류 대시보드</div>
+        <div class="page-subtitle">실시간 물류 현황 및 성과 확인</div>
+    </div>
+    <?php if (isAdmin()): ?>
+    <a href="<?= CRM_URL ?>/pages/international/settings.php" class="btn btn-secondary" style="font-size: 13px;">설정 관리</a>
+    <?php endif; ?>
 </div>
 
 <!-- 대시보드 그리드 -->
@@ -411,10 +417,9 @@ include dirname(dirname(__DIR__)) . '/includes/header.php';
                 <label>국가</label>
                 <select name="country">
                     <option value="">전체</option>
-                    <option value="중앙아시아" <?= $searchCountry === '중앙아시아' ? 'selected' : '' ?>>중앙아시아</option>
-                    <option value="중동" <?= $searchCountry === '중동' ? 'selected' : '' ?>>중동</option>
-                    <option value="아프리카" <?= $searchCountry === '아프리카' ? 'selected' : '' ?>>아프리카</option>
-                    <option value="유럽" <?= $searchCountry === '유럽' ? 'selected' : '' ?>>유럽</option>
+                    <?php foreach ($countries as $country): ?>
+                    <option value="<?= h($country) ?>" <?= $searchCountry === $country ? 'selected' : '' ?>><?= h($country) ?></option>
+                    <?php endforeach; ?>
                 </select>
             </div>
             <div class="search-field">

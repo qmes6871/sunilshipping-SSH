@@ -11,9 +11,9 @@ $pageSubtitle = getDepartmentName($currentUser['department'] ?? '');
 // 데이터 로드
 $pdo = getDB();
 
-// 할일 목록 (최근 5개)
+// 내 할일 목록 (개인 업무 - source='personal' 또는 미지정)
 try {
-    $stmt = $pdo->prepare("SELECT * FROM " . CRM_TODOS_TABLE . " WHERE user_id = ? ORDER BY is_completed ASC, deadline ASC LIMIT 5");
+    $stmt = $pdo->prepare("SELECT * FROM " . CRM_TODOS_TABLE . " WHERE user_id = ? AND (source = 'personal' OR source IS NULL) ORDER BY is_completed ASC, deadline ASC LIMIT 5");
     $stmt->execute([$currentUser['crm_user_id'] ?? 0]);
     $todos = $stmt->fetchAll();
 } catch (Exception $e) {
@@ -84,9 +84,10 @@ try {
     $userMemo = '';
 }
 
-// 회사 설정 로드 (사명, 미션)
+// 회사 설정 로드 (사명, 미션, 우선순위 업무)
 $companyMotto = '우리는 고객들의 모든 길을 선일로 통하게 하기 위해 존재한다.';
 $companyMission = '글로벌 물류 혁신을 통해 고객의 비즈니스 성장을 가속화합니다';
+$priorityTasksText = '고객 만족을 최우선으로 생각하며, 신속하고 정확한 업무 처리를 목표로 합니다.';
 try {
     // 설정 테이블 존재 확인 및 생성
     $pdo->exec("CREATE TABLE IF NOT EXISTS " . CRM_SETTINGS_TABLE . " (
@@ -97,13 +98,16 @@ try {
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
-    $stmt = $pdo->query("SELECT setting_key, setting_value FROM " . CRM_SETTINGS_TABLE . " WHERE setting_key IN ('company_motto', 'company_mission')");
+    $stmt = $pdo->query("SELECT setting_key, setting_value FROM " . CRM_SETTINGS_TABLE . " WHERE setting_key IN ('company_motto', 'company_mission', 'priority_tasks')");
     while ($row = $stmt->fetch()) {
         if ($row['setting_key'] === 'company_motto' && !empty($row['setting_value'])) {
             $companyMotto = $row['setting_value'];
         }
         if ($row['setting_key'] === 'company_mission' && !empty($row['setting_value'])) {
             $companyMission = $row['setting_value'];
+        }
+        if ($row['setting_key'] === 'priority_tasks' && !empty($row['setting_value'])) {
+            $priorityTasksText = $row['setting_value'];
         }
     }
 } catch (Exception $e) {
@@ -459,28 +463,13 @@ include dirname(__DIR__) . '/includes/header.php';
 
         <!-- 우선순위 업무 -->
         <div class="section-box">
-            <div class="section-label">우선순위 업무</div>
-            <div class="priority-grid">
-                <?php if (!empty($todos)): ?>
-                    <?php
-                    $priorityIcons = ['high' => '🎯', 'medium' => '📌', 'low' => '⏰'];
-                    $count = 0;
-                    foreach ($todos as $todo):
-                        if ($todo['is_completed'] || $count >= 3) continue;
-                        $count++;
-                    ?>
-                    <div class="priority-card">
-                        <div class="priority-icon"><?= $priorityIcons[$todo['priority']] ?? '📌' ?></div>
-                        <div>
-                            <div class="priority-label"><?= h(getPriorityLabel($todo['priority'])) ?></div>
-                            <div class="priority-task"><?= h($todo['title']) ?></div>
-                        </div>
-                    </div>
-                    <?php endforeach; ?>
-                <?php else: ?>
-                    <div class="text-muted" style="font-size: 13px;">등록된 할일이 없습니다.</div>
+            <div class="section-label">
+                우선순위 업무
+                <?php if (isAdmin()): ?>
+                <button class="edit-btn" onclick="openSettingModal('priority')" title="수정">✏️</button>
                 <?php endif; ?>
             </div>
+            <div class="section-text" id="priorityTasks"><?= h($priorityTasksText) ?></div>
         </div>
     </div>
 </div>
@@ -496,7 +485,13 @@ include dirname(__DIR__) . '/includes/header.php';
             </div>
             <div class="card-body">
                 <div class="profile-section">
-                    <div class="avatar-large"><?= mb_substr($currentUser['mb_name'] ?? 'U', 0, 1) ?></div>
+                    <div class="avatar-large">
+                        <?php if (!empty($currentUser['profile_photo'])): ?>
+                            <img src="<?= CRM_UPLOAD_URL ?>/<?= h($currentUser['profile_photo']) ?>" alt="프로필" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">
+                        <?php else: ?>
+                            <?= mb_substr($currentUser['mb_name'] ?? 'U', 0, 1) ?>
+                        <?php endif; ?>
+                    </div>
                     <div class="profile-name"><?= h($currentUser['mb_name'] ?? '사용자') ?></div>
                     <div class="profile-info"><?= h(getDepartmentName($currentUser['department'] ?? '')) ?> · <?= h(getPositionName($currentUser['position'] ?? '')) ?></div>
                     <div class="profile-info"><?= h($currentUser['mb_email'] ?? '') ?></div>
@@ -518,6 +513,26 @@ include dirname(__DIR__) . '/includes/header.php';
                     <div class="file-text">파일을 드래그하거나 클릭</div>
                 </div>
                 <input type="file" id="fileInput" style="display:none" onchange="uploadUserFile(this)">
+
+                <?php if (!empty($userFiles)): ?>
+                <div style="margin-top: 16px; border-top: 1px solid #e9ecef; padding-top: 16px;">
+                    <div style="font-size: 13px; color: #6c757d; margin-bottom: 10px;">최근 파일</div>
+                    <?php
+                    $fileCount = 0;
+                    foreach ($userFiles as $file):
+                        if ($fileCount >= 3) break;
+                        $fileCount++;
+                    ?>
+                    <div class="file-list-item">
+                        <div style="display: flex; align-items: center; gap: 8px; flex: 1; overflow: hidden;">
+                            <span style="font-size: 16px;">📄</span>
+                            <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"><?= h($file['original_name'] ?? $file['file_name'] ?? '파일') ?></span>
+                        </div>
+                        <a href="<?= CRM_UPLOAD_URL ?>/<?= h($file['file_path']) ?>" target="_blank" class="btn btn-sm btn-outline" style="padding: 4px 8px; font-size: 11px;">보기</a>
+                    </div>
+                    <?php endforeach; ?>
+                </div>
+                <?php endif; ?>
             </div>
         </div>
     </div>
@@ -571,7 +586,10 @@ include dirname(__DIR__) . '/includes/header.php';
         <div class="card">
             <div class="card-header">
                 <h3 class="card-title">회의록</h3>
-                <a href="<?= CRM_URL ?>/pages/common/meeting_form.php" class="btn btn-sm btn-primary">등록하기</a>
+                <div style="display: flex; gap: 8px;">
+                    <a href="<?= CRM_URL ?>/pages/common/meetings.php" class="btn btn-sm btn-outline">더보기</a>
+                    <a href="<?= CRM_URL ?>/pages/common/meeting_form.php" class="btn btn-sm btn-primary">등록하기</a>
+                </div>
             </div>
             <div class="card-body">
                 <?php if (!empty($meetings)): ?>
@@ -735,6 +753,9 @@ function openSettingModal(type) {
     } else if (type === 'mission') {
         title.textContent = 'Mission 수정';
         input.value = document.getElementById('companyMission').textContent;
+    } else if (type === 'priority') {
+        title.textContent = '우선순위 업무 수정';
+        input.value = document.getElementById('priorityTasks').textContent;
     }
 
     openModal('settingModal');
@@ -747,7 +768,14 @@ async function saveSetting() {
         return;
     }
 
-    const key = currentSettingType === 'motto' ? 'company_motto' : 'company_mission';
+    let key;
+    if (currentSettingType === 'motto') {
+        key = 'company_motto';
+    } else if (currentSettingType === 'mission') {
+        key = 'company_mission';
+    } else if (currentSettingType === 'priority') {
+        key = 'priority_tasks';
+    }
 
     try {
         const response = await apiPost('<?= CRM_URL ?>/api/common/settings.php', {
@@ -762,8 +790,10 @@ async function saveSetting() {
             // UI 업데이트
             if (currentSettingType === 'motto') {
                 document.getElementById('companyMotto').textContent = value;
-            } else {
+            } else if (currentSettingType === 'mission') {
                 document.getElementById('companyMission').textContent = value;
+            } else if (currentSettingType === 'priority') {
+                document.getElementById('priorityTasks').textContent = value;
             }
         } else {
             showToast(response.message || '저장 중 오류가 발생했습니다.', 'error');

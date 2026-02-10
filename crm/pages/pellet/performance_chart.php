@@ -403,6 +403,37 @@ include dirname(dirname(__DIR__)) . '/includes/header.php';
 .status-badge.fair { background: #fff3cd; color: #664d03; }
 .status-badge.poor { background: #f8d7da; color: #842029; }
 
+/* 액션 버튼 */
+.btn-action {
+    padding: 4px 8px;
+    border: none;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+.btn-action.edit {
+    background: #e7f1ff;
+    color: #084298;
+}
+.btn-action.edit:hover {
+    background: #084298;
+    color: white;
+}
+.btn-action.delete {
+    background: #f8d7da;
+    color: #842029;
+}
+.btn-action.delete:hover {
+    background: #842029;
+    color: white;
+}
+.action-cell {
+    display: flex;
+    gap: 4px;
+    justify-content: center;
+}
+
 /* 모달 */
 .modal {
     display: none;
@@ -698,6 +729,7 @@ include dirname(dirname(__DIR__)) . '/includes/header.php';
                     <th>실적</th>
                     <th>달성률</th>
                     <th>평가</th>
+                    <th>관리</th>
                 </tr>
             </thead>
             <tbody>
@@ -735,6 +767,7 @@ include dirname(dirname(__DIR__)) . '/includes/header.php';
                             </div>
                         </td>
                         <td><span class="status-badge <?= $badgeClass ?>"><?= $badgeText ?></span></td>
+                        <td><span class="action-cell">-</span></td>
                     </tr>
                     <?php endforeach; ?>
                 <?php else: ?>
@@ -742,6 +775,7 @@ include dirname(dirname(__DIR__)) . '/includes/header.php';
                         $rate = $data['achievement_rate'] ?? 0;
                         $badgeClass = $rate >= 100 ? 'excellent' : ($rate >= 85 ? 'good' : ($rate >= 70 ? 'fair' : 'poor'));
                         $badgeText = $rate >= 100 ? '우수' : ($rate >= 85 ? '양호' : ($rate >= 70 ? '보통' : '미흡'));
+                        $isOwner = ($data['user_id'] ?? '') == ($currentUser['crm_user_id'] ?? '');
                     ?>
                     <tr>
                         <td><strong><?= $idx + 1 ?></strong></td>
@@ -758,6 +792,16 @@ include dirname(dirname(__DIR__)) . '/includes/header.php';
                             </div>
                         </td>
                         <td><span class="status-badge <?= $badgeClass ?>"><?= $badgeText ?></span></td>
+                        <td>
+                            <?php if ($isOwner || isAdmin()): ?>
+                            <div class="action-cell">
+                                <button class="btn-action edit" onclick="editPersonalPerformance(<?= $data['id'] ?>)">수정</button>
+                                <button class="btn-action delete" onclick="deletePersonalPerformance(<?= $data['id'] ?>)">삭제</button>
+                            </div>
+                            <?php else: ?>
+                            <span class="action-cell">-</span>
+                            <?php endif; ?>
+                        </td>
                     </tr>
                     <?php endforeach; ?>
                 <?php endif; ?>
@@ -939,6 +983,32 @@ async function submitPerformance() {
         }
     } catch (error) {
         showToast('등록 중 오류가 발생했습니다.', 'error');
+    }
+}
+
+// 개인실적 수정
+function editPersonalPerformance(id) {
+    location.href = 'personal_performance_form.php?id=' + id;
+}
+
+// 개인실적 삭제
+async function deletePersonalPerformance(id) {
+    if (!id || !confirm('정말 삭제하시겠습니까?')) return;
+
+    try {
+        const response = await apiPost(CRM_URL + '/api/pellet/personal_performance.php', {
+            action: 'delete',
+            id: id
+        });
+
+        if (response.success) {
+            showToast('삭제되었습니다.', 'success');
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showToast(response.message || '삭제 중 오류가 발생했습니다.', 'error');
+        }
+    } catch (error) {
+        showToast('삭제 중 오류가 발생했습니다.', 'error');
     }
 }
 </script>
