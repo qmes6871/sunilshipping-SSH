@@ -140,6 +140,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
                 }
 
+                // 달성률 계산 (DECIMAL(5,2) 범위 내로 제한: 최대 999.99)
+                $achievementRate = $data['target_count'] > 0 ? round(($data['actual_count'] / $data['target_count']) * 100, 2) : 0;
+                $achievementRate = min($achievementRate, 999.99);
+
+                // 직원명 가져오기
+                $employeeName = '';
+                if (!empty($data['user_id'])) {
+                    $stmtName = $pdo->prepare("SELECT name FROM " . CRM_USERS_TABLE . " WHERE id = ?");
+                    $stmtName->execute([$data['user_id']]);
+                    $userRow = $stmtName->fetch();
+                    $employeeName = $userRow['name'] ?? '';
+                }
+                if (empty($employeeName)) {
+                    $employeeName = $currentUser['mb_name'] ?? $currentUser['mb_nick'] ?? '';
+                }
+
                 // 기존 데이터 확인
                 $stmt = $pdo->prepare("SELECT id FROM " . CRM_INTL_PERSONAL_PERFORMANCE_TABLE . "
                     WHERE user_id = ? AND {$yearCol} = ? AND {$monthCol} = ? AND region = ?");
@@ -148,21 +164,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 if ($existing) {
                     $stmt = $pdo->prepare("UPDATE " . CRM_INTL_PERSONAL_PERFORMANCE_TABLE . "
-                        SET {$targetCol} = ?, {$actualCol} = ?, notes = ?, updated_at = NOW()
+                        SET {$targetCol} = ?, {$actualCol} = ?, achievement_rate = ?, notes = ?, updated_at = NOW()
                         WHERE id = ?");
-                    $stmt->execute([$data['target_count'], $data['actual_count'], $data['notes'], $existing['id']]);
+                    $stmt->execute([$data['target_count'], $data['actual_count'], $achievementRate, $data['notes'], $existing['id']]);
                     $message = '실적이 수정되었습니다.';
                 } else {
                     $stmt = $pdo->prepare("INSERT INTO " . CRM_INTL_PERSONAL_PERFORMANCE_TABLE . "
-                        (user_id, {$yearCol}, {$monthCol}, region, {$targetCol}, {$actualCol}, notes, created_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, NOW())");
+                        (user_id, employee_name, {$yearCol}, {$monthCol}, region, {$targetCol}, {$actualCol}, achievement_rate, notes, created_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())");
                     $stmt->execute([
                         $data['user_id'],
+                        $employeeName,
                         $data['period_year'],
                         $data['period_month'],
                         $data['region'],
                         $data['target_count'],
                         $data['actual_count'],
+                        $achievementRate,
                         $data['notes']
                     ]);
                     $message = '실적이 등록되었습니다.';
@@ -359,5 +377,23 @@ textarea {
         </div>
     </form>
 </div>
+
+<script>
+// 폼 제출 전 처리 - 빈 값을 0으로 변환
+document.querySelector('form').addEventListener('submit', function(e) {
+    const targetInput = document.getElementById('target');
+    const actualInput = document.getElementById('actual');
+
+    // 빈 값을 0으로 설정 (0도 정상적으로 저장됨)
+    if (targetInput.value === '' || targetInput.value === null) {
+        targetInput.value = 0;
+    }
+    if (actualInput.value === '' || actualInput.value === null) {
+        actualInput.value = 0;
+    }
+
+    return true;
+});
+</script>
 
 <?php include dirname(dirname(__DIR__)) . '/includes/footer.php'; ?>

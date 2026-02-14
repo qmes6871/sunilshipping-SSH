@@ -16,29 +16,30 @@ $regions = getIntlRegions();
 // 기존 성과 조회
 $year = $_GET['year'] ?? date('Y');
 $month = $_GET['month'] ?? date('n');
-$periodType = $_GET['period_type'] ?? 'monthly';
+// type 또는 period_type 파라미터 지원
+$periodType = $_GET['period_type'] ?? $_GET['type'] ?? 'monthly';
 
 $existingData = [];
 $yearCol = 'year';
 $monthCol = 'month';
 $countCol = 'count';
+$tableColumns = [];
 
 try {
     // 테이블이 존재할 경우에만 조회
     $stmt = $pdo->query("SHOW TABLES LIKE '" . CRM_INTL_PERFORMANCE_TABLE . "'");
     if ($stmt->fetch()) {
         // 컬럼 구조 확인
-        $columns = [];
         $colResult = $pdo->query("SHOW COLUMNS FROM " . CRM_INTL_PERFORMANCE_TABLE);
         while ($col = $colResult->fetch()) {
-            $columns[] = $col['Field'];
+            $tableColumns[] = $col['Field'];
         }
-        $yearCol = in_array('year', $columns) ? 'year' : 'period_year';
-        $monthCol = in_array('month', $columns) ? 'month' : 'period_month';
-        $countCol = in_array('count', $columns) ? 'count' : 'performance_count';
+        $yearCol = in_array('year', $tableColumns) ? 'year' : 'period_year';
+        $monthCol = in_array('month', $tableColumns) ? 'month' : 'period_month';
+        $countCol = in_array('count', $tableColumns) ? 'count' : 'performance_count';
 
-        $stmt = $pdo->prepare("SELECT * FROM " . CRM_INTL_PERFORMANCE_TABLE . "
-            WHERE {$yearCol} = ? AND {$monthCol} = ? AND period_type = ?
+        $stmt = $pdo->prepare("SELECT *, {$countCol} as performance_count FROM " . CRM_INTL_PERFORMANCE_TABLE . "
+            WHERE {$yearCol} = ? AND {$monthCol} = ? AND (period_type = ? OR period_type IS NULL OR period_type = 'monthly')
             ORDER BY region");
         $stmt->execute([$year, $month, $periodType]);
         while ($row = $stmt->fetch()) {
@@ -47,6 +48,7 @@ try {
     }
 } catch (Exception $e) {
     // 테이블이 없으면 빈 배열 유지
+    error_log("Performance table error: " . $e->getMessage());
 }
 
 // POST 처리
@@ -166,8 +168,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $year = $postYear;
             $month = $postMonth;
             $periodType = $postPeriodType;
-            $stmt = $pdo->prepare("SELECT * FROM " . CRM_INTL_PERFORMANCE_TABLE . "
-                WHERE {$yearCol} = ? AND {$monthCol} = ? AND period_type = ?
+            $stmt = $pdo->prepare("SELECT *, {$countCol} as performance_count FROM " . CRM_INTL_PERFORMANCE_TABLE . "
+                WHERE {$yearCol} = ? AND {$monthCol} = ? AND (period_type = ? OR period_type IS NULL OR period_type = 'monthly')
                 ORDER BY region");
             $stmt->execute([$year, $month, $periodType]);
             $existingData = [];
@@ -560,6 +562,19 @@ include dirname(dirname(__DIR__)) . '/includes/header.php';
 <?php
 $pageScripts = <<<SCRIPT
 <script>
+// 폼 제출 전 처리 - 빈 값을 0으로 변환
+document.querySelector('form').addEventListener('submit', function(e) {
+    const inputs = document.querySelectorAll('.performance-input');
+    inputs.forEach(function(input) {
+        // 빈 값이거나 NaN인 경우 0으로 설정
+        if (input.value === '' || input.value === null || isNaN(input.value)) {
+            input.value = 0;
+        }
+    });
+    // 0값도 정상적으로 제출 (validation 없음)
+    return true;
+});
+
 // 기간 탭 전환
 const periodTabs = document.querySelectorAll('.period-tab');
 const monthGroup = document.getElementById('monthGroup');

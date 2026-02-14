@@ -12,23 +12,39 @@ $pdo = getDB();
 
 $statusFilter = $_GET['status'] ?? '';
 $routeFilter = $_GET['route'] ?? '';
-$search = $_GET['search'] ?? '';
+$periodFilter = $_GET['period'] ?? '';
+$search = trim($_GET['search'] ?? '');
 $page = max(1, intval($_GET['page'] ?? 1));
 $perPage = 10;
 
 $where = ["1=1"];
 $params = [];
 
-if ($statusFilter) {
+// 상태(유형) 필터
+if ($statusFilter !== '') {
     $where[] = "status = ?";
     $params[] = $statusFilter;
 }
-if ($routeFilter) {
-    $where[] = "route_name LIKE ?";
-    $params[] = "%{$routeFilter}%";
+
+// 루트 필터
+if ($routeFilter !== '') {
+    $where[] = "route_name = ?";
+    $params[] = $routeFilter;
 }
-if ($search) {
-    $where[] = "(title LIKE ? OR content LIKE ?)";
+
+// 기간 필터
+if ($periodFilter === '7days') {
+    $where[] = "created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)";
+} elseif ($periodFilter === '1month') {
+    $where[] = "created_at >= DATE_SUB(NOW(), INTERVAL 1 MONTH)";
+} elseif ($periodFilter === '3months') {
+    $where[] = "created_at >= DATE_SUB(NOW(), INTERVAL 3 MONTH)";
+}
+
+// 키워드 검색
+if ($search !== '') {
+    $where[] = "(title LIKE ? OR content LIKE ? OR section LIKE ?)";
+    $params[] = "%{$search}%";
     $params[] = "%{$search}%";
     $params[] = "%{$search}%";
 }
@@ -138,90 +154,134 @@ include dirname(dirname(__DIR__)) . '/includes/header.php';
 
 /* 통계 */
 .stats {
-    display:flex;
+    display:grid;
+    grid-template-columns:repeat(4, 1fr);
     gap:16px;
-    margin-bottom:20px;
+    margin-bottom:24px;
 }
 .stat-item {
-    flex:1;
-    padding:16px;
-    background:#f8f9fa;
-    border-radius:6px;
+    padding:20px 16px;
+    background:linear-gradient(135deg, #f8f9fa 0%, #fff 100%);
+    border-radius:12px;
     text-align:center;
+    border:1px solid #e9ecef;
+    transition:all 0.2s ease;
+}
+.stat-item:hover {
+    transform:translateY(-2px);
+    box-shadow:0 4px 12px rgba(0,0,0,0.08);
 }
 .stat-label {
-    font-size:12px;
+    font-size:13px;
     color:#6c757d;
-    margin-bottom:4px;
+    margin-bottom:8px;
+    font-weight:500;
 }
 .stat-value {
-    font-size:24px;
-    font-weight:700;
+    font-size:32px;
+    font-weight:800;
     color:#212529;
+    line-height:1;
 }
-.stat-value.urgent {
+.stat-item.urgent {
+    background:linear-gradient(135deg, #fff5f5 0%, #fff 100%);
+    border-color:#ffc9c9;
+}
+.stat-item.urgent .stat-value {
     color:#c92a2a;
 }
-.stat-value.important {
+.stat-item.important {
+    background:linear-gradient(135deg, #fff9db 0%, #fff 100%);
+    border-color:#ffe066;
+}
+.stat-item.important .stat-value {
     color:#d9480f;
+}
+.stat-item.normal {
+    background:linear-gradient(135deg, #e7f5ff 0%, #fff 100%);
+    border-color:#a5d8ff;
+}
+.stat-item.normal .stat-value {
+    color:#1c7ed6;
 }
 
 /* 게시판 툴바 */
 .board-toolbar {
-    display:flex;
-    justify-content:space-between;
+    display:grid;
+    grid-template-columns:1fr auto;
+    gap:16px;
     align-items:center;
-    margin-bottom:20px;
-    padding-bottom:16px;
+    margin-bottom:24px;
+    padding-bottom:20px;
     border-bottom:1px solid #e9ecef;
-    flex-wrap:wrap;
-    gap:12px;
 }
 .board-filters {
     display:flex;
-    gap:10px;
+    gap:12px;
     flex-wrap:wrap;
+    align-items:center;
 }
 .board-filters select,
 .board-filters input {
+    height:42px;
     border:1px solid #ced4da;
-    border-radius:6px;
-    padding:8px 12px;
-    font-size:13px;
+    border-radius:8px;
+    padding:0 14px;
+    font-size:14px;
     background:#fff;
+    transition:all 0.2s;
+}
+.board-filters select:focus,
+.board-filters input:focus {
+    outline:none;
+    border-color:#4a90e2;
+    box-shadow:0 0 0 3px rgba(74, 144, 226, 0.1);
 }
 .board-filters select {
-    min-width:140px;
+    min-width:130px;
+    padding-right:32px;
+    appearance:none;
+    background:#fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23666' d='M6 8L1 3h10z'/%3E%3C/svg%3E") no-repeat right 12px center;
+    cursor:pointer;
 }
 .board-filters input {
-    min-width:200px;
+    min-width:220px;
+}
+.board-filters input::placeholder {
+    color:#adb5bd;
 }
 .board-actions {
     display:flex;
-    gap:8px;
+    gap:10px;
 }
 .btn-filter {
-    padding:8px 16px;
+    height:42px;
+    padding:0 20px;
     border:1px solid #ced4da;
-    border-radius:6px;
+    border-radius:8px;
     background:#fff;
-    font-size:13px;
+    font-size:14px;
     font-weight:600;
     cursor:pointer;
     transition:all 0.2s;
+    white-space:nowrap;
 }
 .btn-filter:hover {
     background:#f8f9fa;
+    border-color:#adb5bd;
 }
 .btn-search {
-    padding:8px 16px;
+    height:42px;
+    padding:0 24px;
     background:#4a90e2;
     color:#fff;
     border:none;
-    border-radius:6px;
-    font-size:13px;
+    border-radius:8px;
+    font-size:14px;
     font-weight:600;
     cursor:pointer;
+    transition:all 0.2s;
+    white-space:nowrap;
 }
 .btn-search:hover {
     background:#3a7bc8;
@@ -230,39 +290,42 @@ include dirname(dirname(__DIR__)) . '/includes/header.php';
 /* 게시판 테이블 */
 .board-table-wrapper {
     overflow-x:auto;
+    margin:0 -4px;
 }
 .board-table {
     width:100%;
     border-collapse:collapse;
-    font-size:13px;
-    table-layout:auto;
+    font-size:14px;
+    table-layout:fixed;
 }
 .board-table thead {
-    background:#f1f3f5;
+    background:#f8f9fa;
 }
 .board-table th {
     text-align:left;
-    padding:12px 14px;
+    padding:14px 16px;
     font-size:12px;
     color:#6c757d;
     text-transform:uppercase;
     letter-spacing:0.05em;
     font-weight:600;
+    border-bottom:2px solid #e9ecef;
 }
-.board-table th:first-child,
-.board-table td:first-child {
+.board-table th:first-child {
+    width:80px;
     text-align:center;
-    white-space:nowrap;
-    padding:12px 8px;
 }
 .board-table th:nth-child(2) {
-    width:120px;
+    width:110px;
+}
+.board-table th:nth-child(3) {
+    width:auto;
 }
 .board-table th:nth-child(4) {
-    width:160px;
+    width:140px;
 }
 .board-table th:nth-child(5) {
-    width:100px;
+    width:90px;
 }
 .board-table th:nth-child(6) {
     width:100px;
@@ -272,26 +335,31 @@ include dirname(dirname(__DIR__)) . '/includes/header.php';
     text-align:center;
 }
 .board-table td {
-    padding:14px;
-    border-top:1px solid #e9ecef;
+    padding:16px;
+    border-bottom:1px solid #f1f3f5;
     background:#fff;
+    vertical-align:middle;
+}
+.board-table td:first-child {
+    text-align:center;
 }
 .board-table tbody tr {
     cursor:pointer;
+    transition:background 0.15s;
 }
 .board-table tbody tr:hover td {
     background:#f8fbff;
 }
 .board-status {
-    padding:5px 14px;
-    border-radius:999px;
+    padding:6px 14px;
+    border-radius:20px;
     font-size:12px;
     font-weight:600;
     display:inline-block;
     text-align:center;
     white-space:nowrap;
-    line-height:1;
-    min-width:45px;
+    line-height:1.2;
+    min-width:50px;
 }
 .board-status.urgent {
     background:#ffe3e3;
@@ -307,28 +375,34 @@ include dirname(dirname(__DIR__)) . '/includes/header.php';
 }
 .board-route {
     display:inline-block;
-    padding:4px 10px;
+    padding:6px 12px;
     background:#f1f3f5;
-    border-radius:4px;
-    font-size:12px;
+    border-radius:6px;
+    font-size:13px;
     font-weight:600;
     color:#495057;
 }
 .board-title {
     font-weight:600;
     color:#212529;
-    margin-bottom:4px;
+    margin-bottom:6px;
+    font-size:14px;
+    line-height:1.4;
 }
 .board-desc {
-    font-size:12px;
+    font-size:13px;
     color:#868e96;
     line-height:1.5;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+    max-width:400px;
 }
 .board-attachment a {
     color:#4a90e2;
     text-decoration:none;
     font-weight:600;
-    font-size:12px;
+    font-size:13px;
 }
 .board-attachment a:hover {
     text-decoration:underline;
@@ -365,15 +439,25 @@ include dirname(dirname(__DIR__)) . '/includes/header.php';
 }
 
 /* 반응형 */
+@media (max-width:992px) {
+    .stats {
+        grid-template-columns:repeat(2, 1fr);
+    }
+    .board-toolbar {
+        grid-template-columns:1fr;
+    }
+    .board-actions {
+        justify-content:flex-end;
+    }
+}
 @media (max-width:768px) {
     .page-header {
         flex-direction:column;
         gap:12px;
         align-items:flex-start;
     }
-    .board-toolbar {
-        flex-direction:column;
-        align-items:stretch;
+    .stats {
+        grid-template-columns:1fr 1fr;
     }
     .board-filters {
         width:100%;
@@ -383,8 +467,8 @@ include dirname(dirname(__DIR__)) . '/includes/header.php';
         flex:1;
         min-width:0;
     }
-    .stats {
-        flex-direction:column;
+    .board-table {
+        min-width:900px;
     }
 }
 </style>
@@ -408,15 +492,15 @@ include dirname(dirname(__DIR__)) . '/includes/header.php';
             <div class="stat-label">전체 공지</div>
             <div class="stat-value"><?= number_format($totalAll) ?></div>
         </div>
-        <div class="stat-item">
+        <div class="stat-item urgent">
             <div class="stat-label">긴급</div>
-            <div class="stat-value urgent"><?= number_format($totalUrgent) ?></div>
+            <div class="stat-value"><?= number_format($totalUrgent) ?></div>
         </div>
-        <div class="stat-item">
+        <div class="stat-item important">
             <div class="stat-label">중요</div>
-            <div class="stat-value important"><?= number_format($totalImportant) ?></div>
+            <div class="stat-value"><?= number_format($totalImportant) ?></div>
         </div>
-        <div class="stat-item">
+        <div class="stat-item normal">
             <div class="stat-label">안내</div>
             <div class="stat-value"><?= number_format($totalNormal) ?></div>
         </div>
@@ -425,13 +509,13 @@ include dirname(dirname(__DIR__)) . '/includes/header.php';
     <!-- 게시판 툴바 -->
     <form class="board-toolbar" method="GET" id="filterForm">
         <div class="board-filters">
-            <select name="status" id="statusFilter" onchange="this.form.submit()">
-                <option value="">전체 상태</option>
+            <select name="status" id="statusFilter">
+                <option value="">전체 유형</option>
                 <option value="urgent" <?= $statusFilter === 'urgent' ? 'selected' : '' ?>>긴급</option>
                 <option value="important" <?= $statusFilter === 'important' ? 'selected' : '' ?>>중요</option>
                 <option value="normal" <?= $statusFilter === 'normal' ? 'selected' : '' ?>>안내</option>
             </select>
-            <select name="route" id="routeFilter" onchange="this.form.submit()">
+            <select name="route" id="routeFilter">
                 <option value="">전체 루트</option>
                 <option value="중앙아시아" <?= $routeFilter === '중앙아시아' ? 'selected' : '' ?>>중앙아시아</option>
                 <option value="중동아프리카" <?= $routeFilter === '중동아프리카' ? 'selected' : '' ?>>중동·아프리카</option>
@@ -440,10 +524,16 @@ include dirname(dirname(__DIR__)) . '/includes/header.php';
                 <option value="동남아시아" <?= $routeFilter === '동남아시아' ? 'selected' : '' ?>>동남아시아</option>
                 <option value="국내" <?= $routeFilter === '국내' ? 'selected' : '' ?>>국내 물류</option>
             </select>
-            <input type="text" name="search" id="searchInput" placeholder="키워드 검색" value="<?= h($search) ?>">
+            <select name="period" id="periodFilter">
+                <option value="">전체 기간</option>
+                <option value="7days" <?= $periodFilter === '7days' ? 'selected' : '' ?>>최근 7일</option>
+                <option value="1month" <?= $periodFilter === '1month' ? 'selected' : '' ?>>최근 1개월</option>
+                <option value="3months" <?= $periodFilter === '3months' ? 'selected' : '' ?>>최근 3개월</option>
+            </select>
+            <input type="text" name="search" id="searchInput" placeholder="제목, 내용, 구간 검색" value="<?= h($search) ?>">
         </div>
         <div class="board-actions">
-            <button type="button" class="btn-filter" onclick="resetFilters()">필터 초기화</button>
+            <button type="button" class="btn-filter" onclick="resetFilters()">초기화</button>
             <button type="submit" class="btn-search">검색</button>
         </div>
     </form>
@@ -543,8 +633,9 @@ let currentRouteId = null;
 function resetFilters() {
     document.getElementById('statusFilter').value = '';
     document.getElementById('routeFilter').value = '';
+    document.getElementById('periodFilter').value = '';
     document.getElementById('searchInput').value = '';
-    document.getElementById('filterForm').submit();
+    location.href = 'routes.php';
 }
 
 async function viewDetail(id) {

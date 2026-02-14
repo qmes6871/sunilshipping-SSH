@@ -136,6 +136,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 errorResponse('내용을 입력해주세요.');
             }
 
+            // 권한 확인: 작성자 또는 관리자만 수정 가능
+            $stmt = $pdo->prepare("SELECT created_by FROM crm_agri_activity_comments WHERE id = ?");
+            $stmt->execute([$id]);
+            $comment = $stmt->fetch();
+
+            if (!$comment) {
+                errorResponse('댓글을 찾을 수 없습니다.');
+            }
+
+            $isAdmin = ($currentUser['crm_role'] ?? '') === 'admin';
+            $isOwner = $comment['created_by'] == $currentUser['crm_user_id'];
+
+            if (!$isAdmin && !$isOwner) {
+                errorResponse('수정 권한이 없습니다.');
+            }
+
             try {
                 $stmt = $pdo->prepare("UPDATE crm_agri_activity_comments
                     SET content = ?, updated_at = NOW()
@@ -153,6 +169,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             if (!$id) {
                 errorResponse('댓글 ID가 필요합니다.');
+            }
+
+            // 권한 확인: 작성자 또는 관리자만 삭제 가능
+            $stmt = $pdo->prepare("SELECT created_by FROM crm_agri_activity_comments WHERE id = ?");
+            $stmt->execute([$id]);
+            $comment = $stmt->fetch();
+
+            if (!$comment) {
+                errorResponse('댓글을 찾을 수 없습니다.');
+            }
+
+            $isAdmin = ($currentUser['crm_role'] ?? '') === 'admin';
+            $isOwner = $comment['created_by'] == $currentUser['crm_user_id'];
+
+            if (!$isAdmin && !$isOwner) {
+                errorResponse('삭제 권한이 없습니다.');
             }
 
             try {

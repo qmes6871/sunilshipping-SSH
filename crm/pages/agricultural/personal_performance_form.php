@@ -55,8 +55,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $messageType = 'error';
         } else {
             try {
-                // 달성률 계산
+                // 달성률 계산 (DECIMAL(5,2) 범위 내로 제한: 최대 999.99)
                 $achievementRate = $data['target_ton'] > 0 ? round(($data['actual_ton'] / $data['target_ton']) * 100, 2) : 0;
+                $achievementRate = min($achievementRate, 999.99); // 최대값 제한
 
                 // 직원명 가져오기
                 $employeeName = $currentUser['mb_name'] ?? $currentUser['mb_nick'] ?? '';
@@ -251,5 +252,23 @@ textarea { resize: vertical; min-height: 80px; }
         </div>
     </form>
 </div>
+
+<script>
+// 폼 제출 전 처리 - 빈 값을 0으로 변환
+document.querySelector('form').addEventListener('submit', function(e) {
+    const targetInput = document.getElementById('target');
+    const actualInput = document.getElementById('actual');
+
+    // 빈 값을 0으로 설정 (0도 정상적으로 저장됨)
+    if (targetInput.value === '' || targetInput.value === null) {
+        targetInput.value = 0;
+    }
+    if (actualInput.value === '' || actualInput.value === null) {
+        actualInput.value = 0;
+    }
+
+    return true;
+});
+</script>
 
 <?php include dirname(dirname(__DIR__)) . '/includes/footer.php'; ?>

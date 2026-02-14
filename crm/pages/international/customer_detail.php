@@ -869,14 +869,22 @@ include dirname(dirname(__DIR__)) . '/includes/header.php';
             <?php else: ?>
                 <?php foreach ($activities as $activity):
                     $comments = $activityComments[$activity['id']] ?? [];
+                    $activityType = $activity['activity_type'] ?? '';
+                    $activityTypeLabel = getActivityTypeLabel($activityType);
                     $iconMap = [
-                        '영업활동' => '📄',
-                        '계약' => '🎤',
-                        '견적' => '📋',
-                        '매출' => '🚚',
+                        '영업활동' => '📄', 'sales' => '📄',
+                        '계약' => '🎤', 'contract' => '🎤',
+                        '견적' => '📋', 'quotation' => '📋',
+                        '매출' => '🚚', 'sale' => '🚚',
                         '영업기회등록' => '📊',
+                        '미팅' => '🎤', 'meeting' => '🎤',
+                        '전화' => '📞', 'call' => '📞', 'phone' => '📞',
+                        '이메일' => '📧', 'email' => '📧',
+                        '제안' => '💼', 'proposal' => '💼',
+                        '방문' => '🚗', 'visit' => '🚗',
+                        '문의' => '❓', 'inquiry' => '❓',
                     ];
-                    $icon = $iconMap[$activity['activity_type'] ?? ''] ?? '📄';
+                    $icon = $iconMap[$activityType] ?? $iconMap[strtolower($activityType)] ?? '📄';
                     $isActivityOwner = ($activity['created_by'] == $currentUser['crm_user_id']);
                 ?>
                 <div class="activity-item-wrapper">
@@ -885,7 +893,7 @@ include dirname(dirname(__DIR__)) . '/includes/header.php';
                         <div class="activity-content">
                             <div class="activity-content-header">
                                 <div class="activity-title">
-                                    <?= h($activity['activity_type'] ?? '') ?>
+                                    <?= h($activityTypeLabel) ?>
                                     <?php if (strtotime($activity['created_at']) > strtotime('-3 days')): ?>
                                     <span class="badge-new">N</span>
                                     <?php endif; ?>

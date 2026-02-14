@@ -13,7 +13,8 @@ $pdo = getDB();
 // 필터
 $year = $_GET['year'] ?? date('Y');
 $month = $_GET['month'] ?? date('n');
-$periodType = $_GET['period_type'] ?? 'monthly';
+// type 또는 period_type 파라미터 지원
+$periodType = $_GET['period_type'] ?? $_GET['type'] ?? 'monthly';
 
 // 부서별 성과 조회 (동적 지역 목록 사용)
 $regions = getIntlRegions();
@@ -42,10 +43,18 @@ try {
         $monthCol = in_array('month', $columns) ? 'month' : 'period_month';
         $countCol = in_array('count', $columns) ? 'count' : 'performance_count';
 
-        $stmt = $pdo->prepare("SELECT region, {$countCol} as performance_count FROM " . CRM_INTL_PERFORMANCE_TABLE . "
-            WHERE {$yearCol} = ? AND ({$monthCol} = ? OR ? IN ('yearly', 'quarterly')) AND (period_type = ? OR period_type IS NULL)
-            ORDER BY region");
-        $stmt->execute([$year, $month, $periodType, $periodType]);
+        // 기간 타입에 따른 조건 분기
+        if ($periodType === 'yearly') {
+            $stmt = $pdo->prepare("SELECT region, SUM({$countCol}) as performance_count FROM " . CRM_INTL_PERFORMANCE_TABLE . "
+                WHERE {$yearCol} = ? AND (period_type = ? OR period_type IS NULL OR period_type = 'monthly')
+                GROUP BY region ORDER BY region");
+            $stmt->execute([$year, $periodType]);
+        } else {
+            $stmt = $pdo->prepare("SELECT region, {$countCol} as performance_count FROM " . CRM_INTL_PERFORMANCE_TABLE . "
+                WHERE {$yearCol} = ? AND {$monthCol} = ? AND (period_type = ? OR period_type IS NULL OR period_type = 'monthly')
+                ORDER BY region");
+            $stmt->execute([$year, $month, $periodType]);
+        }
         while ($row = $stmt->fetch()) {
             $performanceData[$row['region']] = $row['performance_count'];
         }
@@ -514,10 +523,9 @@ include dirname(dirname(__DIR__)) . '/includes/header.php';
 
     <!-- 차트 카드 -->
     <div class="card">
-        <!-- 탭 메뉴 -->
-        <div class="tab-menu">
-            <button class="tab-btn active">차트 보기</button>
-            <button class="tab-btn">테이블 보기</button>
+        <!-- 차트 보기 제목 -->
+        <div class="card-header" style="border-bottom: none; margin-bottom: 0; padding-bottom: 0;">
+            <div class="card-title" style="margin-bottom: 0;">차트 보기</div>
         </div>
 
         <!-- 필터 바 -->
@@ -562,22 +570,30 @@ include dirname(dirname(__DIR__)) . '/includes/header.php';
 
             <!-- 막대 그래프 -->
             <div class="bar-chart">
-                <?php foreach ($regions as $region):
-                    $actual = $performanceData[$region] ?? 0;
-                    $target = $targets[$region] ?? 100;
-                    $percent = $target > 0 ? round(($actual / $target) * 100) : 0;
-                    $percent = min($percent, 100);
-                ?>
-                <div class="bar-item">
-                    <div class="bar-label">
-                        <span class="bar-name"><?= $region ?></span>
-                        <span class="bar-value"><?= number_format($actual) ?>건 / 목표 <?= number_format($target) ?>건</span>
+                <?php if (empty($performanceData) || array_sum($performanceData) === 0): ?>
+                    <div style="text-align: center; padding: 60px 20px; color: #6c757d;">
+                        <div style="font-size: 48px; margin-bottom: 16px;">📊</div>
+                        <div style="font-size: 16px; font-weight: 500; margin-bottom: 8px;">데이터 없음</div>
+                        <div style="font-size: 14px;">선택한 기간에 등록된 실적이 없습니다.</div>
                     </div>
-                    <div class="bar-track">
-                        <div class="bar-fill" style="width: <?= $percent ?>%;"><?= $percent ?>%</div>
+                <?php else: ?>
+                    <?php foreach ($regions as $region):
+                        $actual = $performanceData[$region] ?? 0;
+                        $target = $targets[$region] ?? 100;
+                        $percent = $target > 0 ? round(($actual / $target) * 100) : 0;
+                        $percent = min($percent, 100);
+                    ?>
+                    <div class="bar-item">
+                        <div class="bar-label">
+                            <span class="bar-name"><?= $region ?></span>
+                            <span class="bar-value"><?= number_format($actual) ?>건 / 목표 <?= number_format($target) ?>건</span>
+                        </div>
+                        <div class="bar-track">
+                            <div class="bar-fill" style="width: <?= $percent ?>%;"><?= $percent ?>%</div>
+                        </div>
                     </div>
-                </div>
-                <?php endforeach; ?>
+                    <?php endforeach; ?>
+                <?php endif; ?>
             </div>
         </div>
     </div>
@@ -687,36 +703,21 @@ $pageScripts = <<<'SCRIPT'
 // 필터 버튼 클릭 (일간/주간/월간/분기/연간)
 document.querySelectorAll('.filter-left .filter-btn').forEach(btn => {
     btn.addEventListener('click', function() {
+        // 활성 버튼 변경
+        document.querySelectorAll('.filter-left .filter-btn').forEach(b => b.classList.remove('active'));
+        this.classList.add('active');
+
+        // 기간 타입 설정 및 폼 제출
         const periodType = this.dataset.period;
         document.getElementById('periodTypeInput').value = periodType;
         document.getElementById('filterForm').submit();
     });
 });
 
-// 탭 버튼 클릭 (차트 보기 / 테이블 보기)
-const chartContainer = document.querySelector('.chart-container');
-const detailCards = document.querySelectorAll('.container > .card');
-const detailTableCard = detailCards.length > 1 ? detailCards[1] : null; // 상세 실적 데이터 테이블 카드
-
-document.querySelectorAll('.tab-btn').forEach((btn, index) => {
-    btn.addEventListener('click', function() {
-        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-        this.classList.add('active');
-
-        if (index === 0) {
-            // 차트 보기
-            if (chartContainer) chartContainer.style.display = 'block';
-            if (detailTableCard) detailTableCard.style.display = 'none';
-        } else {
-            // 테이블 보기
-            if (chartContainer) chartContainer.style.display = 'none';
-            if (detailTableCard) detailTableCard.style.display = 'block';
-        }
-    });
+// 지역 필터 변경 시 자동 제출
+document.querySelector('select[name="region"]').addEventListener('change', function() {
+    document.getElementById('filterForm').submit();
 });
-
-// 초기 상태: 차트 보기
-if (detailTableCard) detailTableCard.style.display = 'none';
 </script>
 SCRIPT;
 

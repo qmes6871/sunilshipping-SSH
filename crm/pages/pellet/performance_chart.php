@@ -953,6 +953,16 @@ document.addEventListener('keydown', function(event) {
 async function submitPerformance() {
     const form = document.getElementById('performanceForm');
 
+    // 빈 값을 0으로 변환 (0도 정상적으로 저장 가능)
+    const targetInput = document.getElementById('target');
+    const actualInput = document.getElementById('actual');
+    if (targetInput.value === '' || targetInput.value === null) {
+        targetInput.value = 0;
+    }
+    if (actualInput.value === '' || actualInput.value === null) {
+        actualInput.value = 0;
+    }
+
     // 유효성 검사
     if (!form.checkValidity()) {
         form.reportValidity();
@@ -961,10 +971,10 @@ async function submitPerformance() {
 
     const formData = new FormData(form);
 
-    // 달성률 계산
-    const target = parseFloat(formData.get('target'));
-    const actual = parseFloat(formData.get('actual'));
-    const achievement = Math.round((actual / target) * 100);
+    // 달성률 계산 (target이 0이면 0%)
+    const target = parseFloat(formData.get('target')) || 0;
+    const actual = parseFloat(formData.get('actual')) || 0;
+    const achievement = target > 0 ? Math.round((actual / target) * 100) : 0;
 
     try {
         const response = await fetch(CRM_URL + '/api/pellet/performance.php', {

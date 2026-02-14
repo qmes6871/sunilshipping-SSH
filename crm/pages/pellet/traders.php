@@ -10,34 +10,79 @@ $pageSubtitle = '우드펠렛 거래처';
 
 $pdo = getDB();
 
+// 검색/필터 파라미터
 $search = $_GET['search'] ?? '';
 $tradeType = $_GET['trade_type'] ?? '';
 $status = $_GET['status'] ?? '';
+$searchManager = $_GET['search_manager'] ?? '';
+$dateFrom = $_GET['date_from'] ?? '';
+$dateTo = $_GET['date_to'] ?? '';
+$sortBy = $_GET['sort'] ?? 'date';
 $page = max(1, intval($_GET['page'] ?? 1));
 $perPage = 20;
 
 $where = ["1=1"];
 $params = [];
 
+// 기본 검색 (거래처명, 담당자, 연락처)
 if ($search) {
-    $where[] = "(company_name LIKE ? OR contact_person LIKE ? OR phone LIKE ?)";
+    $where[] = "(t.company_name LIKE ? OR t.contact_person LIKE ? OR t.phone LIKE ?)";
     $params[] = "%{$search}%";
     $params[] = "%{$search}%";
     $params[] = "%{$search}%";
 }
+
+// 유형 필터
 if ($tradeType) {
-    $where[] = "trade_type = ?";
+    $where[] = "t.trade_type = ?";
     $params[] = $tradeType;
 }
+
+// 상태 필터
 if ($status) {
-    $where[] = "status = ?";
+    $where[] = "t.status = ?";
     $params[] = $status;
+}
+
+// 담당자 검색
+if ($searchManager) {
+    $where[] = "u.name LIKE ?";
+    $params[] = "%{$searchManager}%";
+}
+
+// 기간 검색
+if ($dateFrom) {
+    $where[] = "DATE(t.created_at) >= ?";
+    $params[] = $dateFrom;
+}
+if ($dateTo) {
+    $where[] = "DATE(t.created_at) <= ?";
+    $params[] = $dateTo;
 }
 
 $whereClause = implode(' AND ', $where);
 
+// 정렬 설정
+switch ($sortBy) {
+    case 'type':
+        $orderBy = 't.trade_type ASC, t.created_at DESC';
+        break;
+    case 'name':
+        $orderBy = 't.company_name ASC';
+        break;
+    case 'date':
+    default:
+        $orderBy = 't.created_at DESC';
+        break;
+}
+
+// 검색 조건 여부
+$hasSearchCondition = $search || $tradeType || $status || $searchManager || $dateFrom || $dateTo;
+
 try {
-    $stmt = $pdo->prepare("SELECT COUNT(*) FROM " . CRM_PELLET_TRADERS_TABLE . " WHERE {$whereClause}");
+    $stmt = $pdo->prepare("SELECT COUNT(*) FROM " . CRM_PELLET_TRADERS_TABLE . " t
+        LEFT JOIN " . CRM_USERS_TABLE . " u ON t.assigned_sales = u.id
+        WHERE {$whereClause}");
     $stmt->execute($params);
     $totalCount = $stmt->fetchColumn();
 } catch (Exception $e) {
@@ -52,7 +97,7 @@ try {
         FROM " . CRM_PELLET_TRADERS_TABLE . " t
         LEFT JOIN " . CRM_USERS_TABLE . " u ON t.assigned_sales = u.id
         WHERE {$whereClause}
-        ORDER BY t.created_at DESC
+        ORDER BY {$orderBy}
         LIMIT {$perPage} OFFSET {$offset}");
     $stmt->execute($params);
     $traders = $stmt->fetchAll();
@@ -191,35 +236,238 @@ include dirname(dirname(__DIR__)) . '/includes/header.php';
         color: #999;
         grid-column: 1 / -1;
     }
+
+    /* 상세 검색 영역 */
+    .btn-outline {
+        height: 40px;
+        padding: 0 16px;
+        font-size: 14px;
+        font-weight: 500;
+        border-radius: 6px;
+        border: 1px solid #dee2e6;
+        background: white;
+        color: #495057;
+        cursor: pointer;
+        white-space: nowrap;
+    }
+
+    .btn-outline:hover {
+        background: #f8f9fa;
+        border-color: #f97316;
+        color: #f97316;
+    }
+
+    .advanced-search {
+        display: none;
+        padding: 16px;
+        background: #fffbeb;
+        border-radius: 8px;
+        margin-top: 12px;
+        border: 1px solid #fde68a;
+    }
+
+    .advanced-search.show {
+        display: block;
+    }
+
+    .search-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 16px;
+        margin-bottom: 16px;
+    }
+
+    .search-field {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .search-label {
+        font-size: 12px;
+        font-weight: 500;
+        color: #92400e;
+    }
+
+    .search-input {
+        height: 38px;
+        padding: 0 12px;
+        border: 1px solid #fde68a;
+        border-radius: 6px;
+        font-size: 14px;
+        background: white;
+    }
+
+    .search-input:focus {
+        outline: none;
+        border-color: #f97316;
+        box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1);
+    }
+
+    .date-range {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .date-range input {
+        flex: 1;
+        height: 38px;
+        padding: 0 8px;
+        border: 1px solid #fde68a;
+        border-radius: 6px;
+        font-size: 13px;
+    }
+
+    .date-range span {
+        color: #92400e;
+    }
+
+    .search-actions {
+        display: flex;
+        justify-content: center;
+        gap: 12px;
+    }
+
+    .btn-search-primary {
+        padding: 10px 32px;
+        background: #f97316;
+        color: white;
+        border: none;
+        border-radius: 6px;
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+    }
+
+    .btn-search-primary:hover {
+        background: #ea580c;
+    }
+
+    .btn-search-secondary {
+        padding: 10px 32px;
+        background: #6c757d;
+        color: white;
+        border: none;
+        border-radius: 6px;
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+    }
+
+    .btn-search-secondary:hover {
+        background: #5c636a;
+    }
+
+    @media (max-width: 1024px) {
+        .search-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+    }
+
+    @media (max-width: 768px) {
+        .search-grid {
+            grid-template-columns: 1fr;
+        }
+    }
 </style>
 
 <div class="card" style="padding: 16px; margin-bottom: 24px;">
-    <form class="filter-bar" method="GET">
-        <div class="search-box">
-            <input type="text" name="search" class="form-control" placeholder="회사명, 담당자, 연락처 검색" value="<?= htmlspecialchars($search) ?>">
-            <button type="submit" class="btn btn-secondary">검색</button>
+    <form method="GET" id="searchForm">
+        <!-- 기본 검색 영역 -->
+        <div class="filter-bar">
+            <div class="search-box">
+                <input type="text" name="search" class="form-control" placeholder="거래처명, 담당자, 연락처 검색" value="<?= htmlspecialchars($search) ?>">
+                <button type="submit" class="btn btn-secondary">검색</button>
+            </div>
+
+            <select name="trade_type" class="form-control" style="width: auto;">
+                <option value="">전체 유형</option>
+                <option value="online" <?= $tradeType === 'online' ? 'selected' : '' ?>>온라인</option>
+                <option value="offline_wholesale" <?= $tradeType === 'offline_wholesale' ? 'selected' : '' ?>>오프라인(도매)</option>
+                <option value="offline_retail" <?= $tradeType === 'offline_retail' ? 'selected' : '' ?>>오프라인(소매)</option>
+                <option value="bulk" <?= $tradeType === 'bulk' ? 'selected' : '' ?>>벌크</option>
+            </select>
+
+            <select name="sort" class="form-control" style="width: auto;" onchange="this.form.submit()">
+                <option value="date" <?= $sortBy === 'date' ? 'selected' : '' ?>>날짜순</option>
+                <option value="type" <?= $sortBy === 'type' ? 'selected' : '' ?>>유형순</option>
+            </select>
+
+            <button type="button" class="btn btn-outline" onclick="toggleAdvancedSearch()" id="advancedSearchToggle">
+                상세 검색 ▼
+            </button>
+
+            <a href="trader_form.php" class="btn btn-primary">+ 거래처 등록</a>
         </div>
 
-        <select name="trade_type" class="form-control" style="width: auto;" onchange="this.form.submit()">
-            <option value="">전체 유형</option>
-            <option value="online" <?= $tradeType === 'online' ? 'selected' : '' ?>>온라인</option>
-            <option value="offline_wholesale" <?= $tradeType === 'offline_wholesale' ? 'selected' : '' ?>>오프라인(도매)</option>
-            <option value="offline_retail" <?= $tradeType === 'offline_retail' ? 'selected' : '' ?>>오프라인(소매)</option>
-            <option value="bulk" <?= $tradeType === 'bulk' ? 'selected' : '' ?>>벌크</option>
-        </select>
-
-        <select name="status" class="form-control" style="width: auto;" onchange="this.form.submit()">
-            <option value="">전체 상태</option>
-            <option value="active" <?= $status === 'active' ? 'selected' : '' ?>>활성</option>
-            <option value="inactive" <?= $status === 'inactive' ? 'selected' : '' ?>>비활성</option>
-            <option value="pending" <?= $status === 'pending' ? 'selected' : '' ?>>대기</option>
-        </select>
-
-        <a href="trader_form.php" class="btn btn-primary">+ 거래처 등록</a>
+        <!-- 상세 검색 영역 -->
+        <div id="advancedSearchArea" class="advanced-search <?= ($searchManager || $dateFrom || $dateTo || $status) ? 'show' : '' ?>">
+            <div class="search-grid">
+                <div class="search-field">
+                    <label class="search-label">담당자</label>
+                    <input type="text" name="search_manager" class="search-input" placeholder="담당자명 검색" value="<?= htmlspecialchars($searchManager) ?>">
+                </div>
+                <div class="search-field">
+                    <label class="search-label">상태</label>
+                    <select name="status" class="search-input">
+                        <option value="">전체 상태</option>
+                        <option value="active" <?= $status === 'active' ? 'selected' : '' ?>>활성</option>
+                        <option value="inactive" <?= $status === 'inactive' ? 'selected' : '' ?>>비활성</option>
+                        <option value="pending" <?= $status === 'pending' ? 'selected' : '' ?>>대기</option>
+                    </select>
+                </div>
+                <div class="search-field">
+                    <label class="search-label">등록일</label>
+                    <div class="date-range">
+                        <input type="date" name="date_from" value="<?= htmlspecialchars($dateFrom) ?>">
+                        <span>~</span>
+                        <input type="date" name="date_to" value="<?= htmlspecialchars($dateTo) ?>">
+                    </div>
+                </div>
+            </div>
+            <div class="search-actions">
+                <button type="submit" class="btn btn-search-primary">검색</button>
+                <button type="button" class="btn btn-search-secondary" onclick="resetSearch()">초기화</button>
+            </div>
+        </div>
     </form>
 </div>
 
-<p style="margin-bottom: 16px; color: #666;">총 <strong><?= number_format($totalCount) ?></strong>개 거래처</p>
+<script>
+function toggleAdvancedSearch() {
+    var area = document.getElementById('advancedSearchArea');
+    var btn = document.getElementById('advancedSearchToggle');
+    if (area.classList.contains('show')) {
+        area.classList.remove('show');
+        btn.innerHTML = '상세 검색 ▼';
+    } else {
+        area.classList.add('show');
+        btn.innerHTML = '상세 검색 ▲';
+    }
+}
+
+function resetSearch() {
+    window.location.href = '<?= CRM_URL ?>/pages/pellet/traders.php';
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    var area = document.getElementById('advancedSearchArea');
+    var btn = document.getElementById('advancedSearchToggle');
+    if (area && area.classList.contains('show')) {
+        btn.innerHTML = '상세 검색 ▲';
+    }
+});
+</script>
+
+<p style="margin-bottom: 16px; color: #666;">
+    <?php if ($hasSearchCondition): ?>
+        검색 결과: <strong><?= number_format($totalCount) ?></strong>개 거래처
+        <a href="<?= CRM_URL ?>/pages/pellet/traders.php" style="margin-left: 10px; color: #f97316; text-decoration: none;">[검색 초기화]</a>
+    <?php else: ?>
+        총 <strong><?= number_format($totalCount) ?></strong>개 거래처
+    <?php endif; ?>
+</p>
 
 <div class="traders-grid">
     <?php if (empty($traders)): ?>

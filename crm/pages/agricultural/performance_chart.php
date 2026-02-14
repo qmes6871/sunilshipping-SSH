@@ -997,6 +997,16 @@ document.addEventListener('keydown', function(event) {
 async function submitChart() {
     const form = document.getElementById('chartForm');
 
+    // 빈 값을 0으로 변환 (0도 정상적으로 저장 가능)
+    const actualInput = document.getElementById('chartActual');
+    const targetInput = document.getElementById('chartTarget');
+    if (actualInput.value === '' || actualInput.value === null) {
+        actualInput.value = 0;
+    }
+    if (targetInput.value === '' || targetInput.value === null) {
+        targetInput.value = 0;
+    }
+
     // 유효성 검사
     if (!form.checkValidity()) {
         form.reportValidity();

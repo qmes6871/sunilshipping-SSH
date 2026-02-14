@@ -447,7 +447,7 @@ include dirname(__DIR__) . '/includes/header.php';
                 <button class="edit-btn" onclick="openSettingModal('motto')" title="수정">✏️</button>
                 <?php endif; ?>
             </div>
-            <div class="section-text" id="companyMotto"><?= h($companyMotto) ?></div>
+            <div class="section-text" id="companyMotto" style="white-space: pre-line;"><?= h($companyMotto) ?></div>
         </div>
 
         <!-- 미션 -->
@@ -458,7 +458,7 @@ include dirname(__DIR__) . '/includes/header.php';
                 <button class="edit-btn" onclick="openSettingModal('mission')" title="수정">✏️</button>
                 <?php endif; ?>
             </div>
-            <div class="section-text" id="companyMission"><?= h($companyMission) ?></div>
+            <div class="section-text" id="companyMission" style="white-space: pre-line;"><?= h($companyMission) ?></div>
         </div>
 
         <!-- 우선순위 업무 -->
@@ -469,7 +469,7 @@ include dirname(__DIR__) . '/includes/header.php';
                 <button class="edit-btn" onclick="openSettingModal('priority')" title="수정">✏️</button>
                 <?php endif; ?>
             </div>
-            <div class="section-text" id="priorityTasks"><?= h($priorityTasksText) ?></div>
+            <div class="section-text" id="priorityTasks" style="white-space: pre-line;"><?= h($priorityTasksText) ?></div>
         </div>
     </div>
 </div>
@@ -559,7 +559,10 @@ include dirname(__DIR__) . '/includes/header.php';
         <div class="card">
             <div class="card-header">
                 <h3 class="card-title">내 할 일</h3>
-                <a href="<?= CRM_URL ?>/pages/common/todo_form.php" class="btn btn-sm btn-primary">등록하기</a>
+                <div style="display: flex; gap: 8px;">
+                    <a href="<?= CRM_URL ?>/pages/common/todos.php" class="btn btn-sm btn-outline">더보기</a>
+                    <a href="<?= CRM_URL ?>/pages/common/todo_form.php" class="btn btn-sm btn-primary">등록하기</a>
+                </div>
             </div>
             <div class="card-body">
                 <?php if (!empty($todos)): ?>
@@ -813,7 +816,8 @@ async function saveSetting() {
             <button class="modal-close" onclick="closeModal('settingModal')">&times;</button>
         </div>
         <div class="modal-body">
-            <textarea id="settingInput" class="form-control" rows="4" style="width: 100%; resize: vertical;"></textarea>
+            <textarea id="settingInput" class="form-control" rows="6" style="width: 100%; resize: vertical; min-height: 120px;"></textarea>
+            <p style="font-size: 12px; color: #888; margin-top: 8px;">* Enter키로 줄바꿈이 가능합니다.</p>
         </div>
         <div class="modal-footer">
             <button class="btn btn-secondary" onclick="closeModal('settingModal')">취소</button>

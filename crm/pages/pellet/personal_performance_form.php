@@ -55,8 +55,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $messageType = 'error';
         } else {
             try {
-                // 달성률 계산
+                // 달성률 계산 (DECIMAL(5,2) 범위 내로 제한: 최대 999.99)
                 $achievementRate = $data['target_ton'] > 0 ? round(($data['actual_ton'] / $data['target_ton']) * 100, 2) : 0;
+                $achievementRate = min($achievementRate, 999.99); // 최대값 제한
 
                 // 직원명 가져오기
                 $employeeName = $currentUser['mb_name'] ?? $currentUser['mb_nick'] ?? '';
@@ -66,7 +67,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($postId) {
                     // 수정 모드
                     $stmt = $pdo->prepare("UPDATE " . CRM_PELLET_PERSONAL_PERFORMANCE_TABLE . "
-                        SET year = ?, month = ?, item_name = ?, target_amount = ?, actual_amount = ?, achievement_rate = ?, notes = ?, updated_at = NOW()
+                        SET year = ?, month = ?, trade_type = ?, target_amount = ?, actual_amount = ?, achievement_rate = ?, notes = ?, updated_at = NOW()
                         WHERE id = ?");
                     $stmt->execute([
                         $data['period_year'],
@@ -82,7 +83,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 } else {
                     // 신규 등록 모드
                     $stmt = $pdo->prepare("INSERT INTO " . CRM_PELLET_PERSONAL_PERFORMANCE_TABLE . "
-                        (user_id, employee_name, year, month, item_name, target_amount, actual_amount, achievement_rate, notes, created_at)
+                        (user_id, employee_name, year, month, trade_type, target_amount, actual_amount, achievement_rate, notes, created_at)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
                         ON DUPLICATE KEY UPDATE
                         target_amount = VALUES(target_amount),
@@ -223,7 +224,7 @@ textarea { resize: vertical; min-height: 80px; }
                 <select id="channel" name="channel" required>
                     <option value="">선택</option>
                     <?php foreach ($channels as $channel): ?>
-                        <option value="<?= $channel ?>" <?= ($editData['item_name'] ?? '') === $channel ? 'selected' : '' ?>><?= $channel ?></option>
+                        <option value="<?= $channel ?>" <?= ($editData['trade_type'] ?? '') === $channel ? 'selected' : '' ?>><?= $channel ?></option>
                     <?php endforeach; ?>
                 </select>
             </div>
@@ -251,5 +252,23 @@ textarea { resize: vertical; min-height: 80px; }
         </div>
     </form>
 </div>
+
+<script>
+// 폼 제출 전 처리 - 빈 값을 0으로 변환
+document.querySelector('form').addEventListener('submit', function(e) {
+    const targetInput = document.getElementById('target');
+    const actualInput = document.getElementById('actual');
+
+    // 빈 값을 0으로 설정 (0도 정상적으로 저장됨)
+    if (targetInput.value === '' || targetInput.value === null) {
+        targetInput.value = 0;
+    }
+    if (actualInput.value === '' || actualInput.value === null) {
+        actualInput.value = 0;
+    }
+
+    return true;
+});
+</script>
 
 <?php include dirname(dirname(__DIR__)) . '/includes/footer.php'; ?>

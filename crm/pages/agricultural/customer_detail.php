@@ -720,20 +720,50 @@ include dirname(dirname(__DIR__)) . '/includes/header.php';
 
     .comment-actions {
         display: flex;
-        gap: 12px;
+        gap: 8px;
+        margin-top: 8px;
     }
 
     .comment-action-btn {
-        background: none;
-        border: none;
-        color: #10b981;
+        padding: 4px 10px;
+        border-radius: 4px;
         cursor: pointer;
         font-size: 11px;
-        padding: 0;
+        font-weight: 500;
+        transition: all 0.2s;
     }
 
-    .comment-action-btn:hover {
-        text-decoration: underline;
+    .comment-action-btn.reply-btn {
+        background: #e0f2fe;
+        border: 1px solid #0ea5e9;
+        color: #0369a1;
+    }
+
+    .comment-action-btn.reply-btn:hover {
+        background: #0ea5e9;
+        color: white;
+    }
+
+    .comment-action-btn.edit-btn {
+        background: #fff7ed;
+        border: 1px solid #f97316;
+        color: #c2410c;
+    }
+
+    .comment-action-btn.edit-btn:hover {
+        background: #f97316;
+        color: white;
+    }
+
+    .comment-action-btn.delete-btn {
+        background: #fef2f2;
+        border: 1px solid #ef4444;
+        color: #dc2626;
+    }
+
+    .comment-action-btn.delete-btn:hover {
+        background: #ef4444;
+        color: white;
     }
 
     .comment-reply-area {
@@ -1018,17 +1048,17 @@ include dirname(dirname(__DIR__)) . '/includes/header.php';
 
         <!-- 헤더 -->
         <div class="activity-header">
-            <select class="filter-select" id="sortFilter">
-                <option value="date">날짜</option>
-                <option value="type">활동 유형</option>
-                <option value="manager">담당자</option>
+            <select class="filter-select" id="sortFilter" onchange="sortActivities()">
+                <option value="date">날짜순</option>
+                <option value="type">유형순</option>
             </select>
             <select class="filter-select" id="typeFilter">
-                <option value="">전체</option>
+                <option value="">유형선택</option>
                 <option value="영업활동">영업활동</option>
                 <option value="미팅">미팅</option>
-                <option value="전화">전화</option>
-                <option value="이메일">이메일</option>
+                <option value="계약">계약</option>
+                <option value="견적">견적</option>
+                <option value="기타">기타</option>
             </select>
             <button class="btn-register" onclick="location.href='activity_form.php?customer_id=<?= $id ?>'">등록하기</button>
         </div>
@@ -1042,6 +1072,16 @@ include dirname(dirname(__DIR__)) . '/includes/header.php';
                     <?php
                     $activityId = $activity['id'];
                     $actDetails = !empty($activity['details']) ? (is_string($activity['details']) ? json_decode($activity['details'], true) : $activity['details']) : [];
+                    // 댓글 데이터 수집
+                    $activityComments = getActivityComments($pdo, $activityId);
+                    $commentContents = [];
+                    $commentAuthors = [];
+                    foreach ($activityComments as $comment) {
+                        $commentContents[] = $comment['content'] ?? '';
+                        $commentAuthors[] = $comment['user_name'] ?? '';
+                    }
+                    $commentsText = implode(' ', $commentContents);
+                    $authorsText = implode(' ', array_unique($commentAuthors));
                     ?>
                     <div class="activity-item-wrapper" id="aw-<?= $activityId ?>"
                          data-date="<?= $activity['activity_date'] ?? '' ?>"
@@ -1049,24 +1089,34 @@ include dirname(dirname(__DIR__)) . '/includes/header.php';
                          data-description="<?= htmlspecialchars($activity['description'] ?? '') ?>"
                          data-manager="<?= htmlspecialchars($activity['user_name'] ?? '') ?>"
                          data-product="<?= htmlspecialchars($actDetails['product'] ?? ($actDetails['product_type'] ?? '')) ?>"
-                         data-region="<?= htmlspecialchars($actDetails['region'] ?? '') ?>">
+                         data-region="<?= htmlspecialchars($actDetails['region'] ?? '') ?>"
+                         data-comments="<?= htmlspecialchars($commentsText) ?>"
+                         data-comment-authors="<?= htmlspecialchars($authorsText) ?>">
                         <div class="activity-item" data-activity-id="<?= $activityId ?>" onclick="toggleActivity(<?= $activityId ?>)">
                             <div class="activity-icon">
                                 <?php
+                                $activityType = $activity['activity_type'] ?? '';
+                                $activityTypeLabel = getActivityTypeLabel($activityType);
                                 $icons = [
-                                    '영업활동' => '📄',
-                                    '미팅' => '🎤',
-                                    '전화' => '📞',
-                                    '이메일' => '📧',
-                                    '계약' => '📋',
-                                    '매출' => '🚚'
+                                    '영업활동' => '📄', 'sales' => '📄',
+                                    '미팅' => '🎤', 'meeting' => '🎤',
+                                    '전화' => '📞', 'call' => '📞', 'phone' => '📞',
+                                    '이메일' => '📧', 'email' => '📧',
+                                    '계약' => '📋', 'contract' => '📋',
+                                    '매출' => '🚚', 'sale' => '🚚',
+                                    '제안' => '💼', 'proposal' => '💼',
+                                    '거래' => '💰', 'transaction' => '💰',
+                                    '니즈' => '💡', 'needs' => '💡',
+                                    '솔루션' => '🔧', 'solution' => '🔧',
+                                    '방문' => '🚗', 'visit' => '🚗',
+                                    '문의' => '❓', 'inquiry' => '❓'
                                 ];
-                                echo $icons[$activity['activity_type'] ?? ''] ?? '📄';
+                                echo $icons[$activityType] ?? $icons[strtolower($activityType)] ?? '📄';
                                 ?>
                             </div>
                             <div class="activity-content">
                                 <div class="activity-content-header">
-                                    <div class="activity-title"><?= htmlspecialchars($activity['activity_type'] ?? '활동') ?></div>
+                                    <div class="activity-title"><?= htmlspecialchars($activityTypeLabel) ?></div>
                                     <span class="activity-date"><?= date('Y.m.d', strtotime($activity['activity_date'])) ?></span>
                                 </div>
                                 <div class="activity-meta">
@@ -1216,6 +1266,30 @@ include dirname(dirname(__DIR__)) . '/includes/header.php';
 </div>
 
 <script>
+// 정렬 기능
+function sortActivities() {
+    var sortBy = document.getElementById('sortFilter').value;
+    var list = document.querySelector('.activity-list');
+    var items = Array.from(list.querySelectorAll('.activity-item-wrapper'));
+
+    items.sort(function(a, b) {
+        if (sortBy === 'date') {
+            var dateA = a.getAttribute('data-date') || '';
+            var dateB = b.getAttribute('data-date') || '';
+            return dateB.localeCompare(dateA); // 최신순
+        } else if (sortBy === 'type') {
+            var typeA = a.getAttribute('data-type') || '';
+            var typeB = b.getAttribute('data-type') || '';
+            return typeA.localeCompare(typeB); // 유형 가나다순
+        }
+        return 0;
+    });
+
+    items.forEach(function(item) {
+        list.appendChild(item);
+    });
+}
+
 function toggleActivity(activityId) {
     var allWrappers = document.querySelectorAll('.activity-item-wrapper');
     var allItems = document.querySelectorAll('.activity-item');
@@ -1234,9 +1308,13 @@ function toggleActivity(activityId) {
 </script>
 
 <?php
+$currentUserId = $currentUser['crm_user_id'] ?? 0;
+$isAdminVal = (($currentUser['crm_role'] ?? '') === 'admin') ? 'true' : 'false';
 $pageScripts = <<<SCRIPT
 <script>
 const customerId = {$id};
+const currentUserId = {$currentUserId};
+const isAdmin = {$isAdminVal};
 
 // 삭제 기능
 async function deleteCustomer() {
@@ -1324,21 +1402,36 @@ function renderComments(container, comments) {
     comments.forEach(function(comment) {
         const level = comment.depth || 0;
         const levelClass = level === 1 ? 'reply' : (level >= 2 ? 'reply-2' : '');
+        const canEditDelete = isAdmin || (comment.created_by == currentUserId);
 
         let imageHtml = '';
         if (comment.image) {
             imageHtml = '<div class="comment-image"><img src="' + CRM_URL + '/uploads/' + comment.image + '" onclick="window.open(this.src)" alt="첨부이미지"></div>';
         }
 
-        const html = '<div class="comment-item ' + levelClass + '" data-comment-id="' + comment.id + '">' +
+        let editDeleteBtns = '';
+        if (canEditDelete) {
+            editDeleteBtns = '<button class="comment-action-btn edit-btn" onclick="editComment(' + comment.id + ', ' + comment.activity_id + ')">수정</button>' +
+                '<button class="comment-action-btn delete-btn" onclick="deleteComment(' + comment.id + ', ' + comment.activity_id + ')">삭제</button>';
+        }
+
+        const html = '<div class="comment-item ' + levelClass + '" data-comment-id="' + comment.id + '" data-content="' + encodeURIComponent(comment.content || '') + '">' +
             '<div class="comment-header">' +
                 '<span class="comment-author">' + (comment.user_name || '익명') + '</span>' +
-                '<span class="comment-date-text">' + (comment.created_at || '') + '</span>' +
+                '<span class="comment-date-text">' + (comment.created_at || '') + (comment.updated_at ? ' (수정됨)' : '') + '</span>' +
             '</div>' +
-            '<div class="comment-content">' + (comment.content || '').replace(/\\n/g, '<br>') + '</div>' +
+            '<div class="comment-content" id="comment-content-' + comment.id + '">' + (comment.content || '').replace(/\\n/g, '<br>') + '</div>' +
             imageHtml +
-            '<div class="comment-actions">' +
+            '<div class="comment-edit-area" id="edit-area-' + comment.id + '" style="display:none;">' +
+                '<textarea id="edit-text-' + comment.id + '" style="width:100%;min-height:60px;padding:8px;border:1px solid #dee2e6;border-radius:4px;font-size:13px;"></textarea>' +
+                '<div style="display:flex;gap:8px;margin-top:8px;">' +
+                    '<button class="comment-reply-submit" onclick="saveEditComment(' + comment.id + ', ' + comment.activity_id + ')">저장</button>' +
+                    '<button class="comment-reply-cancel" onclick="cancelEditComment(' + comment.id + ')">취소</button>' +
+                '</div>' +
+            '</div>' +
+            '<div class="comment-actions" id="comment-actions-' + comment.id + '">' +
                 '<button class="comment-action-btn reply-btn" onclick="showReplyForm(' + comment.id + ')">답글</button>' +
+                editDeleteBtns +
             '</div>' +
             '<div class="comment-reply-area" id="reply-area-' + comment.id + '">' +
                 '<textarea placeholder="답글을 입력하세요..." id="reply-text-' + comment.id + '"></textarea>' +
@@ -1501,23 +1594,114 @@ async function submitReply(parentId, activityId) {
     }
 }
 
+// 댓글 수정 모드 시작
+function editComment(commentId, activityId) {
+    const commentItem = document.querySelector('[data-comment-id="' + commentId + '"]');
+    const contentEl = document.getElementById('comment-content-' + commentId);
+    const editArea = document.getElementById('edit-area-' + commentId);
+    const actionsEl = document.getElementById('comment-actions-' + commentId);
+    const editTextarea = document.getElementById('edit-text-' + commentId);
+
+    if (!commentItem || !editArea || !editTextarea) return;
+
+    // 원본 내용 가져오기
+    const originalContent = decodeURIComponent(commentItem.dataset.content || '');
+    editTextarea.value = originalContent;
+
+    // UI 전환
+    if (contentEl) contentEl.style.display = 'none';
+    if (actionsEl) actionsEl.style.display = 'none';
+    editArea.style.display = 'block';
+    editTextarea.focus();
+}
+
+// 댓글 수정 취소
+function cancelEditComment(commentId) {
+    const contentEl = document.getElementById('comment-content-' + commentId);
+    const editArea = document.getElementById('edit-area-' + commentId);
+    const actionsEl = document.getElementById('comment-actions-' + commentId);
+
+    if (contentEl) contentEl.style.display = 'block';
+    if (actionsEl) actionsEl.style.display = 'flex';
+    if (editArea) editArea.style.display = 'none';
+}
+
+// 댓글 수정 저장
+async function saveEditComment(commentId, activityId) {
+    const editTextarea = document.getElementById('edit-text-' + commentId);
+    const content = editTextarea ? editTextarea.value.trim() : '';
+
+    if (!content) {
+        showToast('내용을 입력해주세요.', 'warning');
+        return;
+    }
+
+    try {
+        const response = await apiPost(CRM_URL + '/api/agricultural/comments.php', {
+            action: 'update',
+            id: commentId,
+            content: content
+        });
+
+        if (response && response.success) {
+            loadComments(activityId);
+            showToast('댓글이 수정되었습니다.', 'success');
+        } else {
+            showToast(response?.message || '댓글 수정에 실패했습니다.', 'error');
+        }
+    } catch (error) {
+        console.error('Edit comment error:', error);
+        showToast('댓글 수정 중 오류가 발생했습니다.', 'error');
+    }
+}
+
+// 댓글 삭제
+async function deleteComment(commentId, activityId) {
+    if (!confirm('정말 이 댓글을 삭제하시겠습니까?')) return;
+
+    try {
+        const response = await apiPost(CRM_URL + '/api/agricultural/comments.php', {
+            action: 'delete',
+            id: commentId
+        });
+
+        if (response && response.success) {
+            loadComments(activityId);
+            showToast('댓글이 삭제되었습니다.', 'success');
+        } else {
+            showToast(response?.message || '댓글 삭제에 실패했습니다.', 'error');
+        }
+    } catch (error) {
+        console.error('Delete comment error:', error);
+        showToast('댓글 삭제 중 오류가 발생했습니다.', 'error');
+    }
+}
+
 // 검색 기능
 function searchActivities() {
-    const searchProduct = (document.getElementById('searchProduct')?.value || '').toLowerCase();
-    const searchRegion = (document.getElementById('searchRegion')?.value || '').toLowerCase();
-    const searchManager = (document.getElementById('searchManager')?.value || '').toLowerCase();
+    // 검색 입력값 가져오기
+    const searchProduct = (document.getElementById('searchProduct')?.value || '').toLowerCase().trim();
+    const searchRegion = (document.getElementById('searchRegion')?.value || '').toLowerCase().trim();
+    const searchManager = (document.getElementById('searchManager')?.value || '').toLowerCase().trim();
+    const searchAuthor = (document.getElementById('searchAuthor')?.value || '').toLowerCase().trim();
+    const searchComment = (document.getElementById('searchComment')?.value || '').toLowerCase().trim();
     const searchDateFrom = document.getElementById('searchDateFrom')?.value || '';
     const searchDateTo = document.getElementById('searchDateTo')?.value || '';
+    const typeFilter = document.getElementById('typeFilter')?.value || '';
 
     const wrappers = document.querySelectorAll('.activity-item-wrapper');
     let visibleCount = 0;
 
     wrappers.forEach(function(wrapper) {
+        // 데이터 속성 가져오기
         const date = wrapper.dataset.date || '';
+        const type = (wrapper.dataset.type || '').toLowerCase();
         const description = (wrapper.dataset.description || '').toLowerCase();
         const manager = (wrapper.dataset.manager || '').toLowerCase();
         const product = (wrapper.dataset.product || '').toLowerCase();
         const region = (wrapper.dataset.region || '').toLowerCase();
+        const comments = (wrapper.dataset.comments || '').toLowerCase();
+        const commentAuthors = (wrapper.dataset.commentAuthors || '').toLowerCase();
 
         let show = true;
 
@@ -1536,11 +1720,26 @@ function searchActivities() {
             show = false;
         }
 
+        // 댓글 작성자 검색
+        if (searchAuthor && !commentAuthors.includes(searchAuthor)) {
+            show = false;
+        }
+
+        // 댓글 내용 검색
+        if (searchComment && !comments.includes(searchComment)) {
+            show = false;
+        }
+
         // 기간 검색
         if (searchDateFrom && date < searchDateFrom) {
             show = false;
         }
         if (searchDateTo && date > searchDateTo) {
+            show = false;
+        }
+
+        // 유형 필터
+        if (typeFilter && !type.includes(typeFilter.toLowerCase())) {
             show = false;
         }
 
@@ -1551,10 +1750,25 @@ function searchActivities() {
     showToast(visibleCount + '개의 활동이 검색되었습니다.', 'info');
 }
 
+// typeFilter 변경 시 검색 실행
+document.addEventListener('DOMContentLoaded', function() {
+    const typeFilter = document.getElementById('typeFilter');
+    if (typeFilter) {
+        typeFilter.addEventListener('change', function() {
+            searchActivities();
+        });
+    }
+});
+
 function resetSearch() {
+    // 모든 검색 입력 필드 초기화
     document.querySelectorAll('.search-input').forEach(function(input) {
         input.value = '';
     });
+
+    // typeFilter select 초기화
+    const typeFilter = document.getElementById('typeFilter');
+    if (typeFilter) typeFilter.value = '';
 
     // 모든 활동 다시 표시
     document.querySelectorAll('.activity-item-wrapper').forEach(function(wrapper) {

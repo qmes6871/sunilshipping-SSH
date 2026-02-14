@@ -396,18 +396,83 @@ function getPositionName($key) {
 }
 
 /**
- * 활동 유형 라벨
+ * 활동 유형 라벨 (영업 단계)
  */
 function getActivityTypeLabel($type) {
     $labels = [
+        // 영업 단계
         'lead' => '리드',
         'contact' => '접촉',
         'proposal' => '제안',
         'negotiation' => '협상',
         'progress' => '진행',
-        'completed' => '정산완료'
+        'completed' => '정산완료',
+        // 활동 유형
+        '영업활동' => '영업활동',
+        '미팅' => '미팅',
+        '전화' => '전화',
+        '이메일' => '이메일',
+        '계약' => '계약',
+        '매출' => '매출',
+        '거래' => '거래',
+        '니즈' => '니즈',
+        '솔루션' => '솔루션',
+        // 영문 활동 유형
+        'sales' => '영업활동',
+        'meeting' => '미팅',
+        'call' => '전화',
+        'phone' => '전화',
+        'email' => '이메일',
+        'contract' => '계약',
+        'sale' => '매출',
+        'transaction' => '거래',
+        'needs' => '니즈',
+        'solution' => '솔루션',
+        'visit' => '방문',
+        'inquiry' => '문의',
+        'quotation' => '견적',
+        'order' => '주문',
+        'delivery' => '배송',
+        'payment' => '결제',
+        'claim' => '클레임',
+        'support' => '지원',
+        'other' => '기타'
     ];
-    return $labels[$type] ?? $type;
+    return $labels[strtolower($type)] ?? $labels[$type] ?? $type;
+}
+
+/**
+ * 액션 타입 라벨 (CRUD 작업)
+ */
+function getActionLabel($action) {
+    $labels = [
+        'create' => '등록',
+        'read' => '조회',
+        'update' => '수정',
+        'delete' => '삭제',
+        'view' => '조회',
+        'edit' => '수정',
+        'add' => '추가',
+        'remove' => '제거',
+        'login' => '로그인',
+        'logout' => '로그아웃',
+        'contact' => '문의',
+        'search' => '검색',
+        'export' => '내보내기',
+        'import' => '가져오기',
+        'upload' => '업로드',
+        'download' => '다운로드',
+        'approve' => '승인',
+        'reject' => '반려',
+        'cancel' => '취소',
+        'complete' => '완료',
+        'submit' => '제출',
+        'save' => '저장',
+        'send' => '발송',
+        'reply' => '답글',
+        'comment' => '댓글'
+    ];
+    return $labels[strtolower($action)] ?? $action;
 }
 
 /**
