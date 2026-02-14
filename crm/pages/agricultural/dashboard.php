@@ -21,32 +21,36 @@ $searchPhone = $_GET['phone'] ?? '';
 $page = max(1, intval($_GET['page'] ?? 1));
 $perPage = 20;
 
-// 품목별 성과
-$categories = ['능이버섯', '능이왕만두', '능이물만두', '밀가루'];
+// 품목별 성과 (개인실적 테이블에서 목표/실적 조회)
+$categories = ['배', '사과', '감귤', '딸기', '수박', '포도', '기타'];
 $monthlyData = [];
 
 try {
-    // 테이블 존재 확인
-    $tableCheck = $pdo->query("SHOW TABLES LIKE '" . CRM_AGRI_PERFORMANCE_TABLE . "'");
+    // 개인실적 테이블에서 품목별 목표/실적 합계 조회 (성과 차트 페이지와 동일한 로직)
+    $tableCheck = $pdo->query("SHOW TABLES LIKE '" . CRM_AGRI_PERSONAL_PERFORMANCE_TABLE . "'");
     if ($tableCheck->fetch()) {
         // 컬럼명 확인
         $columns = [];
-        $colResult = $pdo->query("SHOW COLUMNS FROM " . CRM_AGRI_PERFORMANCE_TABLE);
+        $colResult = $pdo->query("SHOW COLUMNS FROM " . CRM_AGRI_PERSONAL_PERFORMANCE_TABLE);
         while ($col = $colResult->fetch()) {
             $columns[] = $col['Field'];
         }
         $yearCol = in_array('year', $columns) ? 'year' : 'period_year';
         $monthCol = in_array('month', $columns) ? 'month' : 'period_month';
-        $categoryCol = in_array('product_category', $columns) ? 'product_category' : (in_array('category', $columns) ? 'category' : 'item_name');
-        $quantityCol = in_array('quantity', $columns) ? 'quantity' : (in_array('amount', $columns) ? 'amount' : 'count');
+        $itemCol = in_array('item_name', $columns) ? 'item_name' : 'crop';
 
-        $stmt = $pdo->prepare("SELECT {$categoryCol} as category, SUM({$quantityCol}) as total
-            FROM " . CRM_AGRI_PERFORMANCE_TABLE . "
-            WHERE {$yearCol} = ? AND ({$monthCol} = ? OR {$monthCol} IS NULL)
-            GROUP BY {$categoryCol}");
+        $stmt = $pdo->prepare("SELECT {$itemCol} as item,
+            SUM(target_amount) as target_total,
+            SUM(actual_amount) as actual_total
+            FROM " . CRM_AGRI_PERSONAL_PERFORMANCE_TABLE . "
+            WHERE {$yearCol} = ? AND {$monthCol} = ?
+            GROUP BY {$itemCol}");
         $stmt->execute([$year, $month]);
         while ($row = $stmt->fetch()) {
-            $monthlyData[$row['category']] = $row['total'];
+            $monthlyData[$row['item']] = [
+                'target' => floatval($row['target_total']),
+                'actual' => floatval($row['actual_total'])
+            ];
         }
     }
 } catch (Exception $e) {
@@ -427,18 +431,19 @@ include dirname(dirname(__DIR__)) . '/includes/header.php';
 
                 <div class="bar-chart">
                     <?php
-                    $maxValue = max(array_values($monthlyData) ?: [1]);
                     foreach ($categories as $category):
-                        $value = $monthlyData[$category] ?? 0;
-                        $percentage = $maxValue > 0 ? ($value / $maxValue) * 100 : 0;
+                        $data = $monthlyData[$category] ?? ['target' => 0, 'actual' => 0];
+                        $target = $data['target'] ?? 0;
+                        $actual = $data['actual'] ?? 0;
+                        $percentage = $target > 0 ? round(($actual / $target) * 100) : 0;
                     ?>
                     <div class="bar-item">
                         <div class="bar-label">
                             <span class="bar-name"><?= h($category) ?></span>
-                            <span class="bar-value"><?= number_format($value) ?>톤</span>
+                            <span class="bar-value"><?= number_format($actual) ?>톤 / 목표 <?= number_format($target) ?>톤</span>
                         </div>
                         <div class="bar-track">
-                            <div class="bar-fill" style="width: <?= $percentage ?>%;"><?= round($percentage) ?>%</div>
+                            <div class="bar-fill" style="width: <?= min($percentage, 100) ?>%;"><?= $percentage ?>%</div>
                         </div>
                     </div>
                     <?php endforeach; ?>

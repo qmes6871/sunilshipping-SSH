@@ -27,29 +27,35 @@ $perPage = 20;
 $regions = getIntlRegions();
 $countries = getIntlCountries();
 
-// 월별 성과 데이터 조회
+// 월별 성과 데이터 조회 (개인실적 테이블에서 목표/실적 조회)
 $monthlyData = [];
 try {
-    // 테이블 존재 확인
-    $tableCheck = $pdo->query("SHOW TABLES LIKE '" . CRM_INTL_PERFORMANCE_TABLE . "'");
+    // 개인실적 테이블에서 지역별 목표/실적 합계 조회 (성과 차트 페이지와 동일한 로직)
+    $tableCheck = $pdo->query("SHOW TABLES LIKE '" . CRM_INTL_PERSONAL_PERFORMANCE_TABLE . "'");
     if ($tableCheck->fetch()) {
         // 컬럼명 확인
         $columns = [];
-        $colResult = $pdo->query("SHOW COLUMNS FROM " . CRM_INTL_PERFORMANCE_TABLE);
+        $colResult = $pdo->query("SHOW COLUMNS FROM " . CRM_INTL_PERSONAL_PERFORMANCE_TABLE);
         while ($col = $colResult->fetch()) {
             $columns[] = $col['Field'];
         }
         $yearCol = in_array('year', $columns) ? 'year' : 'period_year';
         $monthCol = in_array('month', $columns) ? 'month' : 'period_month';
-        $countCol = in_array('count', $columns) ? 'count' : 'performance_count';
+        $targetCol = in_array('target', $columns) ? 'target' : 'target_count';
+        $actualCol = in_array('actual', $columns) ? 'actual' : 'actual_count';
 
-        $stmt = $pdo->prepare("SELECT region, SUM({$countCol}) as total
-            FROM " . CRM_INTL_PERFORMANCE_TABLE . "
-            WHERE {$yearCol} = ? AND ({$monthCol} = ? OR {$monthCol} IS NULL)
+        $stmt = $pdo->prepare("SELECT region,
+            SUM({$targetCol}) as target_total,
+            SUM({$actualCol}) as actual_total
+            FROM " . CRM_INTL_PERSONAL_PERFORMANCE_TABLE . "
+            WHERE {$yearCol} = ? AND {$monthCol} = ?
             GROUP BY region");
         $stmt->execute([$year, $month]);
         while ($row = $stmt->fetch()) {
-            $monthlyData[$row['region']] = $row['total'];
+            $monthlyData[$row['region']] = [
+                'target' => intval($row['target_total']),
+                'actual' => intval($row['actual_total'])
+            ];
         }
     }
 } catch (Exception $e) {
@@ -373,18 +379,19 @@ include dirname(dirname(__DIR__)) . '/includes/header.php';
                 <!-- 막대 그래프 -->
                 <div class="bar-chart">
                     <?php
-                    $maxValue = max(array_values($monthlyData) ?: [1]);
                     foreach ($regions as $region):
-                        $value = $monthlyData[$region] ?? 0;
-                        $percentage = $maxValue > 0 ? ($value / $maxValue) * 100 : 0;
+                        $data = $monthlyData[$region] ?? ['target' => 0, 'actual' => 0];
+                        $target = $data['target'] ?? 0;
+                        $actual = $data['actual'] ?? 0;
+                        $percentage = $target > 0 ? round(($actual / $target) * 100) : 0;
                     ?>
                     <div class="bar-item">
                         <div class="bar-label">
                             <span class="bar-name"><?= h($region) ?></span>
-                            <span class="bar-value"><?= number_format($value) ?>건</span>
+                            <span class="bar-value"><?= number_format($actual) ?>건 / 목표 <?= number_format($target) ?>건</span>
                         </div>
                         <div class="bar-track">
-                            <div class="bar-fill" style="width: <?= $percentage ?>%;"><?= round($percentage) ?>%</div>
+                            <div class="bar-fill" style="width: <?= min($percentage, 100) ?>%;"><?= $percentage ?>%</div>
                         </div>
                     </div>
                     <?php endforeach; ?>

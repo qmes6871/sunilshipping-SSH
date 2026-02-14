@@ -21,32 +21,36 @@ $searchPhone = $_GET['phone'] ?? '';
 $page = max(1, intval($_GET['page'] ?? 1));
 $perPage = 20;
 
-// 거래 유형별 성과
+// 거래 유형별 성과 (개인실적 테이블에서 목표/실적 조회)
 $tradeTypes = ['온라인', '오프라인', '벌크'];
 $monthlyData = [];
 
 try {
-    // 테이블 존재 확인
-    $tableCheck = $pdo->query("SHOW TABLES LIKE '" . CRM_PELLET_PERFORMANCE_TABLE . "'");
+    // 개인실적 테이블에서 거래유형별 목표/실적 합계 조회 (성과 차트 페이지와 동일한 로직)
+    $tableCheck = $pdo->query("SHOW TABLES LIKE '" . CRM_PELLET_PERSONAL_PERFORMANCE_TABLE . "'");
     if ($tableCheck->fetch()) {
         // 컬럼명 확인
         $columns = [];
-        $colResult = $pdo->query("SHOW COLUMNS FROM " . CRM_PELLET_PERFORMANCE_TABLE);
+        $colResult = $pdo->query("SHOW COLUMNS FROM " . CRM_PELLET_PERSONAL_PERFORMANCE_TABLE);
         while ($col = $colResult->fetch()) {
             $columns[] = $col['Field'];
         }
         $yearCol = in_array('year', $columns) ? 'year' : 'period_year';
         $monthCol = in_array('month', $columns) ? 'month' : 'period_month';
-        $tradeTypeCol = in_array('trade_type', $columns) ? 'trade_type' : (in_array('channel', $columns) ? 'channel' : 'type');
-        $quantityCol = in_array('actual', $columns) ? 'actual' : (in_array('quantity', $columns) ? 'quantity' : 'target');
+        $tradeTypeCol = in_array('trade_type', $columns) ? 'trade_type' : 'channel';
 
-        $stmt = $pdo->prepare("SELECT {$tradeTypeCol} as trade_type, SUM({$quantityCol}) as total
-            FROM " . CRM_PELLET_PERFORMANCE_TABLE . "
-            WHERE {$yearCol} = ? AND ({$monthCol} = ? OR {$monthCol} IS NULL)
+        $stmt = $pdo->prepare("SELECT {$tradeTypeCol} as trade_type,
+            SUM(target_amount) as target_total,
+            SUM(actual_amount) as actual_total
+            FROM " . CRM_PELLET_PERSONAL_PERFORMANCE_TABLE . "
+            WHERE {$yearCol} = ? AND {$monthCol} = ?
             GROUP BY {$tradeTypeCol}");
         $stmt->execute([$year, $month]);
         while ($row = $stmt->fetch()) {
-            $monthlyData[$row['trade_type']] = $row['total'];
+            $monthlyData[$row['trade_type']] = [
+                'target' => floatval($row['target_total']),
+                'actual' => floatval($row['actual_total'])
+            ];
         }
     }
 } catch (Exception $e) {
@@ -415,18 +419,19 @@ include dirname(dirname(__DIR__)) . '/includes/header.php';
 
                 <div class="bar-chart">
                     <?php
-                    $maxValue = max(array_values($monthlyData) ?: [1]);
                     foreach ($tradeTypes as $type):
-                        $value = $monthlyData[$type] ?? 0;
-                        $percentage = $maxValue > 0 ? ($value / $maxValue) * 100 : 0;
+                        $data = $monthlyData[$type] ?? ['target' => 0, 'actual' => 0];
+                        $target = $data['target'] ?? 0;
+                        $actual = $data['actual'] ?? 0;
+                        $percentage = $target > 0 ? round(($actual / $target) * 100) : 0;
                     ?>
                     <div class="bar-item">
                         <div class="bar-label">
                             <span class="bar-name"><?= h($type) ?></span>
-                            <span class="bar-value"><?= number_format($value) ?>톤</span>
+                            <span class="bar-value"><?= number_format($actual) ?>톤 / 목표 <?= number_format($target) ?>톤</span>
                         </div>
                         <div class="bar-track">
-                            <div class="bar-fill" style="width: <?= $percentage ?>%;"><?= round($percentage) ?>%</div>
+                            <div class="bar-fill" style="width: <?= min($percentage, 100) ?>%;"><?= $percentage ?>%</div>
                         </div>
                     </div>
                     <?php endforeach; ?>
