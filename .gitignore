@@ -31,3 +31,19 @@
 /trace/webtracing-service-account.json
 /includes/firebase-service-account.json
 *-service-account.json
+
+# Downloads
+/downloads
+
+# Android build files
+/SunilCRM_App/.gradle
+/SunilCRM_App/build
+/SunilCRM_App/app/build
+/SunilCRM_App/local.properties
+
+# CRM uploads
+/crm/uploads
+/crm/assets/images
+
+# Other
+/other
