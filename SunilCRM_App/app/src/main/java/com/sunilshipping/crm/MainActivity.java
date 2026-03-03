@@ -31,6 +31,8 @@ import androidx.core.content.ContextCompat;
 import androidx.core.content.FileProvider;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 
+import com.google.firebase.messaging.FirebaseMessaging;
+
 import java.io.File;
 import java.io.IOException;
 import java.text.SimpleDateFormat;
@@ -59,7 +61,55 @@ public class MainActivity extends AppCompatActivity {
         initViews();
         setupWebView();
         checkPermissions();
+        initFirebase();
         loadUrl();
+
+        // 알림에서 앱을 열었을 때 URL 처리
+        handleNotificationIntent(getIntent());
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        handleNotificationIntent(intent);
+    }
+
+    private void handleNotificationIntent(Intent intent) {
+        if (intent != null && intent.hasExtra("notification_url")) {
+            String url = intent.getStringExtra("notification_url");
+            if (url != null && !url.isEmpty()) {
+                webView.loadUrl(url);
+            }
+        }
+    }
+
+    private void initFirebase() {
+        // FCM 토큰 가져오기
+        FirebaseMessaging.getInstance().getToken()
+            .addOnCompleteListener(task -> {
+                if (!task.isSuccessful()) {
+                    android.util.Log.w("FCM", "Fetching FCM token failed", task.getException());
+                    return;
+                }
+
+                // 새 FCM 토큰 가져오기
+                String token = task.getResult();
+                android.util.Log.d("FCM", "FCM Token: " + token);
+
+                // 토큰을 SharedPreferences에 저장
+                getSharedPreferences("fcm_prefs", MODE_PRIVATE)
+                    .edit()
+                    .putString("fcm_token", token)
+                    .apply();
+            });
+
+        // 토픽 구독 (전체 알림용)
+        FirebaseMessaging.getInstance().subscribeToTopic("all_users")
+            .addOnCompleteListener(task -> {
+                if (task.isSuccessful()) {
+                    android.util.Log.d("FCM", "Subscribed to all_users topic");
+                }
+            });
     }
 
     private void initViews() {
@@ -219,6 +269,15 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void checkPermissions() {
+        // Android 13+ 알림 권한 요청
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+                    != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(this,
+                    new String[]{Manifest.permission.POST_NOTIFICATIONS}, 102);
+            }
+        }
+
         String[] permissions = {
                 Manifest.permission.CAMERA,
                 Manifest.permission.READ_EXTERNAL_STORAGE,

@@ -46,29 +46,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         case 'create':
             $year = $input['year'] ?? date('Y');
             $month = $input['month'] ?? date('n');
-            $tradeType = trim($input['trade_type'] ?? $input['business'] ?? $input['channel'] ?? '');
+            $channel = trim($input['channel'] ?? $input['trade_type'] ?? $input['business'] ?? '');
             $actual = floatval($input['actual'] ?? 0);
             $target = floatval($input['target'] ?? 0);
-            $note = trim($input['note'] ?? '');
-            $unitPrice = floatval($input['unit_price'] ?? 0);
-            $quality = floatval($input['quality'] ?? 0);
 
-            if (empty($tradeType)) {
+            if (empty($channel)) {
                 errorResponse('판매 채널을 선택해주세요.');
             }
 
             try {
                 $stmt = $pdo->prepare("INSERT INTO " . CRM_PELLET_PERFORMANCE_TABLE . "
-                    (user_id, year, month, trade_type, actual, target, note, created_at)
+                    (year, month, channel, trade_type, actual, target, recorded_by, created_at)
                     VALUES (?, ?, ?, ?, ?, ?, ?, NOW())");
                 $stmt->execute([
-                    $currentUser['crm_user_id'],
                     $year,
                     $month,
-                    $tradeType,
+                    $channel,
+                    $channel,
                     $actual,
                     $target,
-                    $note
+                    $currentUser['crm_user_id']
                 ]);
 
                 $newId = $pdo->lastInsertId();
@@ -86,17 +83,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             try {
+                $channel = trim($input['channel'] ?? $input['trade_type'] ?? '');
                 $stmt = $pdo->prepare("UPDATE " . CRM_PELLET_PERFORMANCE_TABLE . " SET
-                    year = ?, month = ?, trade_type = ?, actual = ?, target = ?,
-                    note = ?, updated_at = NOW()
+                    year = ?, month = ?, channel = ?, trade_type = ?, actual = ?, target = ?
                     WHERE id = ?");
                 $stmt->execute([
                     $input['year'] ?? date('Y'),
                     $input['month'] ?? date('n'),
-                    trim($input['trade_type'] ?? ''),
+                    $channel,
+                    $channel,
                     floatval($input['actual'] ?? 0),
                     floatval($input['target'] ?? 0),
-                    trim($input['note'] ?? ''),
                     $id
                 ]);
 

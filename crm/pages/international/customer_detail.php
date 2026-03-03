@@ -828,11 +828,15 @@ include dirname(dirname(__DIR__)) . '/includes/header.php';
                 <div class="search-field">
                     <label class="search-label">활동 유형</label>
                     <select class="search-input" id="qActivityType">
-                        <option value="">전체</option>
-                        <option value="영업활동">영업활동</option>
+                        <option value="">유형선택</option>
+                        <option value="리드">리드</option>
+                        <option value="접촉">접촉</option>
+                        <option value="제안">제안</option>
                         <option value="계약">계약</option>
-                        <option value="견적">견적</option>
-                        <option value="매출">매출</option>
+                        <option value="협상">협상</option>
+                        <option value="진행">진행</option>
+                        <option value="부킹완료">부킹완료</option>
+                        <option value="정산완료">정산완료</option>
                     </select>
                 </div>
                 <div class="search-field">
@@ -1338,6 +1342,34 @@ function resetActivitySearch() {
     document.getElementById('qFromDate').value = '';
     document.getElementById('qToDate').value = '';
     document.querySelectorAll('.activity-item-wrapper').forEach(w => w.style.display = '');
+}
+
+// 정렬 기능
+const sortSelect = document.getElementById('sortSelect');
+if (sortSelect) {
+    sortSelect.addEventListener('change', function() {
+        const sortBy = this.value;
+        const activityList = document.getElementById('activityList');
+        if (!activityList) return;
+
+        const items = Array.from(activityList.querySelectorAll('.activity-item-wrapper'));
+        if (items.length === 0) return;
+
+        items.sort((a, b) => {
+            if (sortBy === 'date') {
+                const dateA = a.querySelector('.activity-date')?.textContent || '';
+                const dateB = b.querySelector('.activity-date')?.textContent || '';
+                return dateB.localeCompare(dateA); // 최신순
+            } else if (sortBy === 'type') {
+                const typeA = a.querySelector('.activity-title')?.textContent?.trim() || '';
+                const typeB = b.querySelector('.activity-title')?.textContent?.trim() || '';
+                return typeA.localeCompare(typeB, 'ko');
+            }
+            return 0;
+        });
+
+        items.forEach(item => activityList.appendChild(item));
+    });
 }
 
 function toggleEditForm(commentId, content = '') {

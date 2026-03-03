@@ -18,6 +18,14 @@ $pageSubtitle = $pageSubtitle ?? '';
     <!-- Favicon -->
     <link rel="icon" type="image/x-icon" href="<?= CRM_URL ?>/assets/images/favicon.ico">
 
+    <!-- PWA 설정 -->
+    <link rel="manifest" href="<?= CRM_URL ?>/manifest.json">
+    <meta name="theme-color" content="#0d6efd">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="선일CRM">
+    <link rel="apple-touch-icon" href="<?= CRM_URL ?>/assets/images/icon-192.png">
+
     <!-- CSS -->
     <link rel="stylesheet" href="<?= CRM_URL ?>/assets/css/style.css">
 

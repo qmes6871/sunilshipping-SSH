@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "651976686480",
+    "project_id": "sunilshipping-crm-ce3ef",
+    "storage_bucket": "sunilshipping-crm-ce3ef.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:651976686480:android:b8e07243ec517be2e41115",
+        "android_client_info": {
+          "package_name": "com.sunilshipping.crm"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBejyQe2MqXAjTyrOW5V1eTMYFee0il6dY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

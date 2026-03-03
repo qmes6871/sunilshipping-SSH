@@ -203,5 +203,20 @@
     <?php if (isset($pageScripts)): ?>
     <?= $pageScripts ?>
     <?php endif; ?>
+
+    <!-- PWA Service Worker 등록 -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('<?= CRM_URL ?>/sw.js')
+                    .then((registration) => {
+                        console.log('[PWA] Service Worker registered:', registration.scope);
+                    })
+                    .catch((error) => {
+                        console.log('[PWA] Service Worker registration failed:', error);
+                    });
+            });
+        }
+    </script>
 </body>
 </html>

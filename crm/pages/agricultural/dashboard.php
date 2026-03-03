@@ -22,7 +22,7 @@ $page = max(1, intval($_GET['page'] ?? 1));
 $perPage = 20;
 
 // 품목별 성과 (개인실적 테이블에서 목표/실적 조회)
-$categories = ['배', '사과', '감귤', '딸기', '수박', '포도', '기타'];
+$categories = []; // DB에서 실제 사용된 품목을 수집
 $monthlyData = [];
 
 try {
@@ -47,7 +47,11 @@ try {
             GROUP BY {$itemCol}");
         $stmt->execute([$year, $month]);
         while ($row = $stmt->fetch()) {
-            $monthlyData[$row['item']] = [
+            $item = $row['item'] ?: '미지정';
+            if (!in_array($item, $categories)) {
+                $categories[] = $item;
+            }
+            $monthlyData[$item] = [
                 'target' => floatval($row['target_total']),
                 'actual' => floatval($row['actual_total'])
             ];
@@ -55,6 +59,51 @@ try {
     }
 } catch (Exception $e) {
     // 오류 시 빈 배열 유지
+}
+
+// 부서실적 테이블에서도 데이터 조회하여 병합
+try {
+    $tableCheck = $pdo->query("SHOW TABLES LIKE '" . CRM_AGRI_PERFORMANCE_TABLE . "'");
+    if ($tableCheck->fetch()) {
+        $columns = [];
+        $colResult = $pdo->query("SHOW COLUMNS FROM " . CRM_AGRI_PERFORMANCE_TABLE);
+        while ($col = $colResult->fetch()) {
+            $columns[] = $col['Field'];
+        }
+        $yearCol = in_array('year', $columns) ? 'year' : 'period_year';
+        $monthCol = in_array('month', $columns) ? 'month' : 'period_month';
+        $itemCol = in_array('item_name', $columns) ? 'item_name' : (in_array('category', $columns) ? 'category' : 'item_name');
+        $targetCol = in_array('target', $columns) ? 'target' : '0';
+        $actualCol = in_array('actual', $columns) ? 'actual' : '0';
+
+        $stmt = $pdo->prepare("SELECT {$itemCol} as item,
+            SUM(COALESCE({$targetCol}, 0)) as target_total,
+            SUM(COALESCE({$actualCol}, 0)) as actual_total
+            FROM " . CRM_AGRI_PERFORMANCE_TABLE . "
+            WHERE {$yearCol} = ? AND {$monthCol} = ?
+            GROUP BY {$itemCol}");
+        $stmt->execute([$year, $month]);
+        while ($row = $stmt->fetch()) {
+            $item = $row['item'] ?: '미지정';
+            if (!empty($item)) {
+                if (!in_array($item, $categories)) {
+                    $categories[] = $item;
+                }
+                if (!isset($monthlyData[$item])) {
+                    $monthlyData[$item] = ['target' => 0, 'actual' => 0];
+                }
+                $monthlyData[$item]['target'] += floatval($row['target_total']);
+                $monthlyData[$item]['actual'] += floatval($row['actual_total']);
+            }
+        }
+    }
+} catch (Exception $e) {
+    // 오류 시 무시
+}
+
+// 데이터가 없으면 기본 품목 목록 사용
+if (empty($categories)) {
+    $categories = ['배', '사과', '감귤', '딸기', '수박', '포도', '기타'];
 }
 
 // 바이어 검색 쿼리
@@ -430,6 +479,12 @@ include dirname(dirname(__DIR__)) . '/includes/header.php';
                 </div>
 
                 <div class="bar-chart">
+                    <?php if (empty($monthlyData)): ?>
+                    <div style="text-align: center; padding: 40px 20px; color: #6c757d;">
+                        <div style="font-size: 36px; margin-bottom: 12px;">📊</div>
+                        <div style="font-size: 14px;">선택한 기간에 등록된 실적이 없습니다.</div>
+                    </div>
+                    <?php else: ?>
                     <?php
                     foreach ($categories as $category):
                         $data = $monthlyData[$category] ?? ['target' => 0, 'actual' => 0];
@@ -447,6 +502,7 @@ include dirname(dirname(__DIR__)) . '/includes/header.php';
                         </div>
                     </div>
                     <?php endforeach; ?>
+                    <?php endif; ?>
                 </div>
             </div>
         </div>

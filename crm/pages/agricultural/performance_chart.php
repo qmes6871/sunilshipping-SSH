@@ -16,6 +16,8 @@ $period = $_GET['period'] ?? 'monthly';
 
 // 개인별 실적 데이터 조회
 $personalData = [];
+// 품목별 집계 데이터 (차트용)
+$chartData = [];
 try {
     $tableCheck = $pdo->query("SHOW TABLES LIKE '" . CRM_AGRI_PERSONAL_PERFORMANCE_TABLE . "'");
     if ($tableCheck->fetch()) {
@@ -28,28 +30,60 @@ try {
         $yearCol = in_array('year', $columns) ? 'year' : 'period_year';
         $monthCol = in_array('month', $columns) ? 'month' : 'period_month';
         $rateCol = in_array('achievement_rate', $columns) ? 'achievement_rate' : 'rate';
+        $targetCol = in_array('target_amount', $columns) ? 'target_amount' : 'target';
+        $actualCol = in_array('actual_amount', $columns) ? 'actual_amount' : 'actual';
 
-        $periodTypeCol = in_array('period_type', $columns) ? 'period_type' : null;
-        $periodCondition = $periodTypeCol ? " AND ({$periodTypeCol} = ? OR {$periodTypeCol} IS NULL)" : "";
+        // 품목별 집계 (차트용)
+        if ($period === 'yearly') {
+            $stmt = $pdo->prepare("SELECT item_name,
+                SUM({$targetCol}) as target_total,
+                SUM({$actualCol}) as actual_total
+                FROM " . CRM_AGRI_PERSONAL_PERFORMANCE_TABLE . "
+                WHERE {$yearCol} = ?
+                GROUP BY item_name
+                ORDER BY actual_total DESC");
+            $stmt->execute([$year]);
+        } else {
+            $stmt = $pdo->prepare("SELECT item_name,
+                SUM({$targetCol}) as target_total,
+                SUM({$actualCol}) as actual_total
+                FROM " . CRM_AGRI_PERSONAL_PERFORMANCE_TABLE . "
+                WHERE {$yearCol} = ? AND {$monthCol} = ?
+                GROUP BY item_name
+                ORDER BY actual_total DESC");
+            $stmt->execute([$year, $month]);
+        }
+        while ($row = $stmt->fetch()) {
+            $chartData[] = [
+                'name' => $row['item_name'] ?: '미지정',
+                'actual' => floatval($row['actual_total']),
+                'target' => floatval($row['target_total']),
+                'unit' => '톤'
+            ];
+        }
 
-        $stmt = $pdo->prepare("SELECT * FROM " . CRM_AGRI_PERSONAL_PERFORMANCE_TABLE . "
-            WHERE {$yearCol} = ? AND ({$monthCol} = ? OR ? IN ('yearly', 'quarterly'))" . $periodCondition . "
-            ORDER BY {$rateCol} DESC");
-        $params = [$year, $month, $period];
-        if ($periodTypeCol) $params[] = $period;
-        $stmt->execute($params);
+        // 개인별 상세 데이터
+        if ($period === 'yearly') {
+            $stmt = $pdo->prepare("SELECT * FROM " . CRM_AGRI_PERSONAL_PERFORMANCE_TABLE . "
+                WHERE {$yearCol} = ?
+                ORDER BY {$rateCol} DESC");
+            $stmt->execute([$year]);
+        } else {
+            $stmt = $pdo->prepare("SELECT * FROM " . CRM_AGRI_PERSONAL_PERFORMANCE_TABLE . "
+                WHERE {$yearCol} = ? AND {$monthCol} = ?
+                ORDER BY {$rateCol} DESC");
+            $stmt->execute([$year, $month]);
+        }
         $personalData = $stmt->fetchAll();
     }
 } catch (Exception $e) {
     // 오류 시 빈 배열 유지
 }
 
-// 전체 실적 데이터 조회
-$performanceData = [];
+// 성과 테이블에서도 데이터 조회하여 병합
 try {
     $tableCheck = $pdo->query("SHOW TABLES LIKE '" . CRM_AGRI_PERFORMANCE_TABLE . "'");
     if ($tableCheck->fetch()) {
-        // 컬럼명 확인
         $columns = [];
         $colResult = $pdo->query("SHOW COLUMNS FROM " . CRM_AGRI_PERFORMANCE_TABLE);
         while ($col = $colResult->fetch()) {
@@ -57,20 +91,56 @@ try {
         }
         $yearCol = in_array('year', $columns) ? 'year' : 'period_year';
         $monthCol = in_array('month', $columns) ? 'month' : 'period_month';
+        $itemCol = in_array('item_name', $columns) ? 'item_name' : (in_array('business', $columns) ? 'business' : 'category');
+        // amount 컬럼이 없을 경우를 대비한 안전한 fallback
+        $amountCol = in_array('amount', $columns) ? 'amount' : '0';
+        $targetCol = in_array('target', $columns) ? 'target' : $amountCol;
+        $actualCol = in_array('actual', $columns) ? 'actual' : $amountCol;
 
-        $periodTypeCol = in_array('period_type', $columns) ? 'period_type' : null;
-        $periodCondition = $periodTypeCol ? " AND ({$periodTypeCol} = ? OR {$periodTypeCol} IS NULL)" : "";
-
-        $stmt = $pdo->prepare("SELECT * FROM " . CRM_AGRI_PERFORMANCE_TABLE . "
-            WHERE {$yearCol} = ? AND ({$monthCol} = ? OR ? IN ('yearly', 'quarterly'))" . $periodCondition . "
-            ORDER BY id DESC");
-        $params = [$year, $month, $period];
-        if ($periodTypeCol) $params[] = $period;
-        $stmt->execute($params);
-        $performanceData = $stmt->fetchAll();
+        if ($period === 'yearly') {
+            $stmt = $pdo->prepare("SELECT {$itemCol} as item_name,
+                SUM(COALESCE({$targetCol}, 0)) as target_total,
+                SUM(COALESCE({$actualCol}, 0)) as actual_total
+                FROM " . CRM_AGRI_PERFORMANCE_TABLE . "
+                WHERE {$yearCol} = ?
+                GROUP BY {$itemCol}
+                ORDER BY actual_total DESC");
+            $stmt->execute([$year]);
+        } else {
+            $stmt = $pdo->prepare("SELECT {$itemCol} as item_name,
+                SUM(COALESCE({$targetCol}, 0)) as target_total,
+                SUM(COALESCE({$actualCol}, 0)) as actual_total
+                FROM " . CRM_AGRI_PERFORMANCE_TABLE . "
+                WHERE {$yearCol} = ? AND {$monthCol} = ?
+                GROUP BY {$itemCol}
+                ORDER BY actual_total DESC");
+            $stmt->execute([$year, $month]);
+        }
+        while ($row = $stmt->fetch()) {
+            $itemName = $row['item_name'] ?: '미지정';
+            // 기존 chartData에서 해당 품목 찾기
+            $found = false;
+            foreach ($chartData as &$item) {
+                if ($item['name'] === $itemName) {
+                    $item['target'] += floatval($row['target_total']);
+                    $item['actual'] += floatval($row['actual_total']);
+                    $found = true;
+                    break;
+                }
+            }
+            unset($item);
+            if (!$found && (floatval($row['target_total']) > 0 || floatval($row['actual_total']) > 0)) {
+                $chartData[] = [
+                    'name' => $itemName,
+                    'actual' => floatval($row['actual_total']),
+                    'target' => floatval($row['target_total']),
+                    'unit' => '톤'
+                ];
+            }
+        }
     }
 } catch (Exception $e) {
-    // 오류 시 빈 배열 유지
+    // 오류 시 무시
 }
 
 // 통계 계산
@@ -600,10 +670,7 @@ include dirname(dirname(__DIR__)) . '/includes/header.php';
         <!-- 필터 바 -->
         <div class="filter-bar">
             <div class="filter-left">
-                <button class="filter-btn <?= $period === 'daily' ? 'active' : '' ?>" onclick="changePeriod('daily')">일간</button>
-                <button class="filter-btn <?= $period === 'weekly' ? 'active' : '' ?>" onclick="changePeriod('weekly')">주간</button>
                 <button class="filter-btn <?= $period === 'monthly' ? 'active' : '' ?>" onclick="changePeriod('monthly')">월간</button>
-                <button class="filter-btn <?= $period === 'quarterly' ? 'active' : '' ?>" onclick="changePeriod('quarterly')">분기</button>
                 <button class="filter-btn <?= $period === 'yearly' ? 'active' : '' ?>" onclick="changePeriod('yearly')">연간</button>
             </div>
             <div class="filter-right">
@@ -630,35 +697,32 @@ include dirname(dirname(__DIR__)) . '/includes/header.php';
         <!-- 차트 영역 -->
         <div class="chart-container">
             <div class="chart-header">
-                <div class="chart-title">사업별 월간 실적 (<?= $year ?>년 <?= $month ?>월)</div>
+                <div class="chart-title">품목별 <?= $period === 'yearly' ? '연간' : '월간' ?> 실적 (<?= $year ?>년<?= $period !== 'yearly' ? " {$month}월" : '' ?>)</div>
             </div>
 
             <!-- 막대 그래프 -->
             <div class="bar-chart">
-                <?php
-                // 샘플 차트 데이터 (실제로는 DB에서 가져옴)
-                $chartData = [
-                    ['name' => '농산물 수출', 'actual' => 715, 'target' => 800, 'unit' => '톤'],
-                    ['name' => '우드펠렛', 'actual' => 2450, 'target' => 2500, 'unit' => '톤'],
-                    ['name' => '국제물류', 'actual' => 510, 'target' => 600, 'unit' => '건'],
-                    ['name' => '자원개발', 'actual' => 168, 'target' => 200, 'unit' => '톤'],
-                    ['name' => '컨설팅', 'actual' => 42, 'target' => 50, 'unit' => '건'],
-                    ['name' => '유통/판매', 'actual' => 365, 'target' => 400, 'unit' => '건'],
-                ];
-
-                foreach ($chartData as $item):
-                    $percentage = $item['target'] > 0 ? round(($item['actual'] / $item['target']) * 100) : 0;
-                ?>
-                <div class="bar-item">
-                    <div class="bar-label">
-                        <span class="bar-name"><?= $item['name'] ?></span>
-                        <span class="bar-value"><?= number_format($item['actual']) ?><?= $item['unit'] ?> / 목표 <?= number_format($item['target']) ?><?= $item['unit'] ?></span>
+                <?php if (empty($chartData)): ?>
+                    <div style="text-align: center; padding: 60px 20px; color: #6c757d;">
+                        <div style="font-size: 48px; margin-bottom: 16px;">📊</div>
+                        <div style="font-size: 16px; font-weight: 500; margin-bottom: 8px;">데이터 없음</div>
+                        <div style="font-size: 14px;">선택한 기간에 등록된 실적이 없습니다.</div>
                     </div>
-                    <div class="bar-track">
-                        <div class="bar-fill" style="width: <?= min($percentage, 100) ?>%;"><?= $percentage ?>%</div>
+                <?php else: ?>
+                    <?php foreach ($chartData as $item):
+                        $percentage = $item['target'] > 0 ? round(($item['actual'] / $item['target']) * 100) : 0;
+                    ?>
+                    <div class="bar-item">
+                        <div class="bar-label">
+                            <span class="bar-name"><?= h($item['name']) ?></span>
+                            <span class="bar-value"><?= number_format($item['actual']) ?><?= $item['unit'] ?> / 목표 <?= number_format($item['target']) ?><?= $item['unit'] ?></span>
+                        </div>
+                        <div class="bar-track">
+                            <div class="bar-fill" style="width: <?= min($percentage, 100) ?>%;"><?= $percentage ?>%</div>
+                        </div>
                     </div>
-                </div>
-                <?php endforeach; ?>
+                    <?php endforeach; ?>
+                <?php endif; ?>
             </div>
         </div>
     </div>

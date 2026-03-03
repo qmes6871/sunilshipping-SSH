@@ -47,3 +47,5 @@
 
 # Other
 /other
+*.tar.gz
+crm/logs/*.log

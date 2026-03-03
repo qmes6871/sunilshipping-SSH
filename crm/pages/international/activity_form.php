@@ -93,15 +93,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $currentUser['crm_user_id']
                 ]);
 
+                $activityId = $pdo->lastInsertId();
+
                 // 파일 업로드 처리
                 if (!empty($_FILES['recording']['name'])) {
-                    $activityId = $pdo->lastInsertId();
                     $result = uploadFile($_FILES['recording'], 'activities/recordings', CRM_ALLOWED_AUDIO_TYPES);
                     if ($result['success']) {
                         $stmt = $pdo->prepare("INSERT INTO " . CRM_FILES_TABLE . "
                             (entity_type, entity_id, file_name, file_path, file_size, file_type, uploaded_by, created_at)
                             VALUES ('intl_activity', ?, ?, ?, ?, ?, ?, NOW())");
                         $stmt->execute([$activityId, $result['original_name'], $result['path'], $result['size'], $_FILES['recording']['type'], $currentUser['crm_user_id']]);
+                    }
+                }
+
+                // 진행/부킹완료/정산완료 시 전체 직원에게 앱 알림 발송
+                $notifyActivityTypes = ['progress', 'booking_completed', 'settlement_completed'];
+                if (in_array($activityType, $notifyActivityTypes) && $data['customer_id']) {
+                    // 거래처명 가져오기
+                    $customerName = '';
+                    if ($customer) {
+                        $customerName = $customer['name'];
+                    } else {
+                        // 거래처가 선택된 경우 이름 조회
+                        $stmt = $pdo->prepare("SELECT name FROM " . CRM_INTL_CUSTOMERS_TABLE . " WHERE id = ?");
+                        $stmt->execute([$data['customer_id']]);
+                        $customerData = $stmt->fetch();
+                        $customerName = $customerData ? $customerData['name'] : '(알 수 없음)';
+                    }
+
+                    // FCM 푸시 알림 발송 (Firebase 설정이 있는 경우)
+                    if (function_exists('sendIntlActivityFCM')) {
+                        sendIntlActivityFCM($activityType, $customerName, $data['activity_date']);
+                    } else {
+                        // FCM이 없으면 DB에만 저장
+                        createIntlActivityNotification($activityType, $customerName, $data['activity_date']);
                     }
                 }
 

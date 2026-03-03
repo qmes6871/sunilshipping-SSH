@@ -69,7 +69,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             try {
                 $stmt = $pdo->prepare("INSERT INTO " . CRM_PELLET_PERSONAL_PERFORMANCE_TABLE . "
-                    (user_id, employee_name, year, month, item_name, target_amount, actual_amount, achievement_rate, notes, created_at)
+                    (user_id, employee_name, year, month, trade_type, target_amount, actual_amount, achievement_rate, notes, created_at)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
                     ON DUPLICATE KEY UPDATE
                     target_amount = VALUES(target_amount),
@@ -109,13 +109,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             try {
                 $stmt = $pdo->prepare("UPDATE " . CRM_PELLET_PERSONAL_PERFORMANCE_TABLE . " SET
-                    year = ?, month = ?, item_name = ?, target_amount = ?,
+                    year = ?, month = ?, trade_type = ?, target_amount = ?,
                     actual_amount = ?, achievement_rate = ?, notes = ?, updated_at = NOW()
                     WHERE id = ?");
                 $stmt->execute([
                     $input['year'] ?? date('Y'),
                     $input['month'] ?? date('n'),
-                    trim($input['item_name'] ?? ''),
+                    trim($input['trade_type'] ?? $input['item_name'] ?? ''),
                     $targetAmount,
                     $actualAmount,
                     $achievementRate,

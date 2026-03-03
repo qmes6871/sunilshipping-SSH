@@ -46,31 +46,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         case 'create':
             $year = $input['year'] ?? date('Y');
             $month = $input['month'] ?? date('n');
-            $business = trim($input['business'] ?? '');
+            $itemName = trim($input['business'] ?? $input['item_name'] ?? '');
             $actual = floatval($input['actual'] ?? 0);
             $target = floatval($input['target'] ?? 0);
-            $freshness = !empty($input['freshness']) ? floatval($input['freshness']) : null;
-            $quality = !empty($input['quality']) ? floatval($input['quality']) : null;
-            $note = trim($input['note'] ?? '');
 
-            if (empty($business)) {
-                errorResponse('사업 구분을 선택해주세요.');
+            if (empty($itemName)) {
+                errorResponse('품목을 선택해주세요.');
             }
 
             try {
                 $stmt = $pdo->prepare("INSERT INTO " . CRM_AGRI_PERFORMANCE_TABLE . "
-                    (user_id, year, month, business, actual, target, freshness, quality, note, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())");
+                    (year, month, item_name, actual, target, recorded_by, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, NOW())");
                 $stmt->execute([
-                    $currentUser['crm_user_id'],
                     $year,
                     $month,
-                    $business,
+                    $itemName,
                     $actual,
                     $target,
-                    $freshness,
-                    $quality,
-                    $note
+                    $currentUser['crm_user_id']
                 ]);
 
                 $newId = $pdo->lastInsertId();
@@ -89,18 +83,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             try {
                 $stmt = $pdo->prepare("UPDATE " . CRM_AGRI_PERFORMANCE_TABLE . " SET
-                    year = ?, month = ?, business = ?, actual = ?, target = ?,
-                    freshness = ?, quality = ?, note = ?, updated_at = NOW()
+                    year = ?, month = ?, item_name = ?, actual = ?, target = ?
                     WHERE id = ?");
                 $stmt->execute([
                     $input['year'] ?? date('Y'),
                     $input['month'] ?? date('n'),
-                    trim($input['business'] ?? ''),
+                    trim($input['business'] ?? $input['item_name'] ?? ''),
                     floatval($input['actual'] ?? 0),
                     floatval($input['target'] ?? 0),
-                    !empty($input['freshness']) ? floatval($input['freshness']) : null,
-                    !empty($input['quality']) ? floatval($input['quality']) : null,
-                    trim($input['note'] ?? ''),
                     $id
                 ]);
 

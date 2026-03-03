@@ -16,24 +16,66 @@ $month = $_GET['month'] ?? date('n');
 // type 또는 period_type 파라미터 지원
 $periodType = $_GET['period_type'] ?? $_GET['type'] ?? 'monthly';
 
-// 부서별 성과 조회 (동적 지역 목록 사용)
-$regions = getIntlRegions();
-
-// 지역별 목표 가져오기 (설정에 저장된 목표값 사용, 없으면 기본값 200)
-$targetsJson = getSetting('intl_region_targets');
-$targets = $targetsJson ? json_decode($targetsJson, true) : [];
-foreach ($regions as $region) {
-    if (!isset($targets[$region])) {
-        $targets[$region] = 200; // 기본 목표
-    }
-}
+// 월별 성과 데이터 조회 (대시보드와 동일한 로직 - 개인실적 테이블에서 목표/실적 조회)
+$monthlyData = [];
+$targets = [];
 $performanceData = [];
+$regions = []; // DB에서 실제 사용된 region을 수집
 
 try {
-    // 테이블 존재 확인
-    $tableCheck = $pdo->query("SHOW TABLES LIKE '" . CRM_INTL_PERFORMANCE_TABLE . "'");
+    // 개인실적 테이블에서 지역별 목표/실적 합계 조회
+    $tableCheck = $pdo->query("SHOW TABLES LIKE '" . CRM_INTL_PERSONAL_PERFORMANCE_TABLE . "'");
     if ($tableCheck->fetch()) {
         // 컬럼명 확인
+        $columns = [];
+        $colResult = $pdo->query("SHOW COLUMNS FROM " . CRM_INTL_PERSONAL_PERFORMANCE_TABLE);
+        while ($col = $colResult->fetch()) {
+            $columns[] = $col['Field'];
+        }
+        $yearCol = in_array('year', $columns) ? 'year' : 'period_year';
+        $monthCol = in_array('month', $columns) ? 'month' : 'period_month';
+        $targetCol = in_array('target', $columns) ? 'target' : 'target_count';
+        $actualCol = in_array('actual', $columns) ? 'actual' : 'actual_count';
+
+        // 기간 타입에 따른 조건 분기
+        if ($periodType === 'yearly') {
+            $stmt = $pdo->prepare("SELECT region,
+                SUM({$targetCol}) as target_total,
+                SUM({$actualCol}) as actual_total
+                FROM " . CRM_INTL_PERSONAL_PERFORMANCE_TABLE . "
+                WHERE {$yearCol} = ?
+                GROUP BY region");
+            $stmt->execute([$year]);
+        } else {
+            $stmt = $pdo->prepare("SELECT region,
+                SUM({$targetCol}) as target_total,
+                SUM({$actualCol}) as actual_total
+                FROM " . CRM_INTL_PERSONAL_PERFORMANCE_TABLE . "
+                WHERE {$yearCol} = ? AND {$monthCol} = ?
+                GROUP BY region");
+            $stmt->execute([$year, $month]);
+        }
+        while ($row = $stmt->fetch()) {
+            $region = $row['region'] ?: '미지정';
+            if (!in_array($region, $regions)) {
+                $regions[] = $region;
+            }
+            $monthlyData[$region] = [
+                'target' => intval($row['target_total']),
+                'actual' => intval($row['actual_total'])
+            ];
+            $targets[$region] = intval($row['target_total']);
+            $performanceData[$region] = intval($row['actual_total']);
+        }
+    }
+} catch (Exception $e) {
+    // 오류 시 빈 배열 유지
+}
+
+// 부서실적 테이블에서도 데이터 조회하여 병합
+try {
+    $tableCheck = $pdo->query("SHOW TABLES LIKE '" . CRM_INTL_PERFORMANCE_TABLE . "'");
+    if ($tableCheck->fetch()) {
         $columns = [];
         $colResult = $pdo->query("SHOW COLUMNS FROM " . CRM_INTL_PERFORMANCE_TABLE);
         while ($col = $colResult->fetch()) {
@@ -41,26 +83,68 @@ try {
         }
         $yearCol = in_array('year', $columns) ? 'year' : 'period_year';
         $monthCol = in_array('month', $columns) ? 'month' : 'period_month';
-        $countCol = in_array('count', $columns) ? 'count' : 'performance_count';
+        // performance_count를 실적으로 사용 (target/actual 값이 0인 경우가 많음)
+        $countCol = in_array('performance_count', $columns) ? 'performance_count' : (in_array('count', $columns) ? 'count' : '0');
+        // target 컬럼이 있으면 사용, 없으면 performance_count 사용
+        $targetCol = in_array('target', $columns) ? "GREATEST(COALESCE(target, 0), COALESCE({$countCol}, 0))" : $countCol;
+        // actual 컬럼이 0이면 performance_count를 사용
+        $actualCol = "GREATEST(COALESCE(actual, 0), COALESCE({$countCol}, 0))";
 
-        // 기간 타입에 따른 조건 분기
         if ($periodType === 'yearly') {
-            $stmt = $pdo->prepare("SELECT region, SUM({$countCol}) as performance_count FROM " . CRM_INTL_PERFORMANCE_TABLE . "
-                WHERE {$yearCol} = ? AND (period_type = ? OR period_type IS NULL OR period_type = 'monthly')
-                GROUP BY region ORDER BY region");
-            $stmt->execute([$year, $periodType]);
+            $stmt = $pdo->prepare("SELECT region,
+                SUM({$targetCol}) as target_total,
+                SUM({$actualCol}) as actual_total
+                FROM " . CRM_INTL_PERFORMANCE_TABLE . "
+                WHERE {$yearCol} = ?
+                GROUP BY region");
+            $stmt->execute([$year]);
         } else {
-            $stmt = $pdo->prepare("SELECT region, {$countCol} as performance_count FROM " . CRM_INTL_PERFORMANCE_TABLE . "
-                WHERE {$yearCol} = ? AND {$monthCol} = ? AND (period_type = ? OR period_type IS NULL OR period_type = 'monthly')
-                ORDER BY region");
-            $stmt->execute([$year, $month, $periodType]);
+            $stmt = $pdo->prepare("SELECT region,
+                SUM({$targetCol}) as target_total,
+                SUM({$actualCol}) as actual_total
+                FROM " . CRM_INTL_PERFORMANCE_TABLE . "
+                WHERE {$yearCol} = ? AND {$monthCol} = ?
+                GROUP BY region");
+            $stmt->execute([$year, $month]);
         }
         while ($row = $stmt->fetch()) {
-            $performanceData[$row['region']] = $row['performance_count'];
+            $region = $row['region'] ?: '미지정';
+            if (!empty($region)) {
+                // region 배열에 추가
+                if (!in_array($region, $regions)) {
+                    $regions[] = $region;
+                }
+                // 기존 데이터에 추가
+                if (!isset($monthlyData[$region])) {
+                    $monthlyData[$region] = ['target' => 0, 'actual' => 0];
+                }
+                $monthlyData[$region]['target'] += intval($row['target_total']);
+                $monthlyData[$region]['actual'] += intval($row['actual_total']);
+                $targets[$region] = ($targets[$region] ?? 0) + intval($row['target_total']);
+                $performanceData[$region] = ($performanceData[$region] ?? 0) + intval($row['actual_total']);
+            }
         }
     }
 } catch (Exception $e) {
-    // 오류 시 빈 배열 유지
+    // 오류 시 무시
+}
+
+// 데이터가 없으면 기본 지역 목록 사용
+if (empty($regions)) {
+    $regions = getIntlRegions();
+}
+
+// 지역 목록에 있지만 데이터가 없는 경우 기본값 설정
+foreach ($regions as $region) {
+    if (!isset($targets[$region])) {
+        $targets[$region] = 0;
+    }
+    if (!isset($performanceData[$region])) {
+        $performanceData[$region] = 0;
+    }
+    if (!isset($monthlyData[$region])) {
+        $monthlyData[$region] = ['target' => 0, 'actual' => 0];
+    }
 }
 
 // 개인별 성과 조회
@@ -532,10 +616,7 @@ include dirname(dirname(__DIR__)) . '/includes/header.php';
         <form class="filter-bar" method="GET" id="filterForm">
             <input type="hidden" name="period_type" id="periodTypeInput" value="<?= h($periodType) ?>">
             <div class="filter-left">
-                <button type="button" class="filter-btn <?= $periodType === 'daily' ? 'active' : '' ?>" data-period="daily">일간</button>
-                <button type="button" class="filter-btn <?= $periodType === 'weekly' ? 'active' : '' ?>" data-period="weekly">주간</button>
                 <button type="button" class="filter-btn <?= $periodType === 'monthly' ? 'active' : '' ?>" data-period="monthly">월간</button>
-                <button type="button" class="filter-btn <?= $periodType === 'quarterly' ? 'active' : '' ?>" data-period="quarterly">분기</button>
                 <button type="button" class="filter-btn <?= $periodType === 'yearly' ? 'active' : '' ?>" data-period="yearly">연간</button>
             </div>
             <div class="filter-right">
@@ -598,8 +679,8 @@ include dirname(dirname(__DIR__)) . '/includes/header.php';
         </div>
     </div>
 
-    <!-- 상세 데이터 테이블 -->
-    <div class="card">
+    <!-- 상세 데이터 테이블 (숨김 처리) -->
+    <div class="card" style="display: none;">
         <div class="card-header">
             <div class="card-title">상세 실적 데이터</div>
         </div>
@@ -644,8 +725,8 @@ include dirname(dirname(__DIR__)) . '/includes/header.php';
         </table>
     </div>
 
-    <!-- 개인별 상세 데이터 테이블 -->
-    <div class="card">
+    <!-- 개인별 상세 데이터 테이블 (숨김 처리) -->
+    <div class="card" style="display: none;">
         <div class="card-header">
             <div class="card-title">개인별 상세 실적 데이터</div>
         </div>

@@ -400,30 +400,41 @@ function getPositionName($key) {
  */
 function getActivityTypeLabel($type) {
     $labels = [
-        // 영업 단계
+        // 영업 단계 (한글)
+        '리드' => '리드',
+        '접촉' => '접촉',
+        '제안' => '제안',
+        '계약' => '계약',
+        '협상' => '협상',
+        '진행' => '진행',
+        '부킹완료' => '부킹완료',
+        '정산완료' => '정산완료',
+        // 영업 단계 (영문)
         'lead' => '리드',
         'contact' => '접촉',
         'proposal' => '제안',
+        'contract' => '계약',
         'negotiation' => '협상',
         'progress' => '진행',
+        'booking_completed' => '부킹완료',
+        'settlement_completed' => '정산완료',
         'completed' => '정산완료',
-        // 활동 유형
+        // 기존 활동 유형 (호환성)
         '영업활동' => '영업활동',
         '미팅' => '미팅',
         '전화' => '전화',
         '이메일' => '이메일',
-        '계약' => '계약',
         '매출' => '매출',
         '거래' => '거래',
         '니즈' => '니즈',
         '솔루션' => '솔루션',
-        // 영문 활동 유형
+        '견적' => '견적',
+        // 영문 활동 유형 (호환성)
         'sales' => '영업활동',
         'meeting' => '미팅',
         'call' => '전화',
         'phone' => '전화',
         'email' => '이메일',
-        'contract' => '계약',
         'sale' => '매출',
         'transaction' => '거래',
         'needs' => '니즈',
@@ -622,4 +633,73 @@ function getIntlRegions() {
     setSetting('intl_regions', json_encode($defaultRegions, JSON_UNESCAPED_UNICODE));
 
     return $defaultRegions;
+}
+
+/**
+ * 전체 직원에게 푸시 알림 발송 (국제물류 활동용)
+ * @param string $title 알림 제목
+ * @param string $message 알림 내용
+ * @param string $activityType 활동 유형 (progress, booking_completed, settlement_completed)
+ * @param int|null $customerId 거래처 ID
+ * @param string|null $activityDate 활동 날짜
+ */
+function sendActivityNotificationToAll($title, $message, $activityType = null, $customerId = null, $activityDate = null) {
+    $pdo = getDB();
+    $user = getCurrentUser();
+
+    try {
+        // 푸시 알림 테이블에 저장
+        $stmt = $pdo->prepare("INSERT INTO " . CRM_PUSH_TABLE . "
+            (title, message, channel, target_audience, campaign_name, notification_type, status, target_count, success_count, created_by, created_at, sent_at)
+            VALUES (?, ?, 'app', 'all', ?, 'immediate', 'sent', 0, 0, ?, NOW(), NOW())");
+
+        $campaignName = '국제물류_활동알림_' . ($activityType ?? 'general');
+        $createdBy = $user ? $user['crm_user_id'] : 1; // 기본값 1 (시스템)
+
+        $stmt->execute([
+            $title,
+            $message,
+            $campaignName,
+            $createdBy
+        ]);
+
+        $pushId = $pdo->lastInsertId();
+
+        // 활동 로그 기록
+        writeLog("Activity notification sent: {$title} - {$message}", 'notification');
+
+        return ['success' => true, 'push_id' => $pushId, 'message' => '알림이 발송되었습니다.'];
+    } catch (PDOException $e) {
+        error_log("sendActivityNotificationToAll Error: " . $e->getMessage());
+        return ['success' => false, 'message' => '알림 발송 중 오류가 발생했습니다.'];
+    }
+}
+
+/**
+ * 국제물류 활동 알림 생성 (진행/부킹완료/정산완료)
+ * @param string $activityType 활동 유형
+ * @param string $customerName 거래처명
+ * @param string $activityDate 활동 날짜
+ */
+function createIntlActivityNotification($activityType, $customerName, $activityDate) {
+    // 알림 대상 활동 유형 확인
+    $notifyTypes = ['progress', 'booking_completed', 'settlement_completed'];
+    if (!in_array($activityType, $notifyTypes)) {
+        return ['success' => false, 'message' => '알림 대상 활동 유형이 아닙니다.'];
+    }
+
+    // 활동 유형 한글 변환
+    $typeLabels = [
+        'progress' => '진행',
+        'booking_completed' => '부킹완료',
+        'settlement_completed' => '정산완료'
+    ];
+    $typeLabel = $typeLabels[$activityType] ?? $activityType;
+
+    // 알림 메시지 생성
+    // 예시: "라브샨님 2026-02-27에 진행되었습니다."
+    $title = '국제물류 활동 알림';
+    $message = "{$customerName}님 {$activityDate}에 {$typeLabel}되었습니다.";
+
+    return sendActivityNotificationToAll($title, $message, $activityType, null, $activityDate);
 }

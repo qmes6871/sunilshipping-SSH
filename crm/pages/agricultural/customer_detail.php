@@ -1054,11 +1054,14 @@ include dirname(dirname(__DIR__)) . '/includes/header.php';
             </select>
             <select class="filter-select" id="typeFilter">
                 <option value="">유형선택</option>
-                <option value="영업활동">영업활동</option>
-                <option value="미팅">미팅</option>
+                <option value="리드">리드</option>
+                <option value="접촉">접촉</option>
+                <option value="제안">제안</option>
                 <option value="계약">계약</option>
-                <option value="견적">견적</option>
-                <option value="기타">기타</option>
+                <option value="협상">협상</option>
+                <option value="진행">진행</option>
+                <option value="부킹완료">부킹완료</option>
+                <option value="정산완료">정산완료</option>
             </select>
             <button class="btn-register" onclick="location.href='activity_form.php?customer_id=<?= $id ?>'">등록하기</button>
         </div>
@@ -1751,14 +1754,14 @@ function searchActivities() {
 }
 
 // typeFilter 변경 시 검색 실행
-document.addEventListener('DOMContentLoaded', function() {
+(function() {
     const typeFilter = document.getElementById('typeFilter');
     if (typeFilter) {
         typeFilter.addEventListener('change', function() {
             searchActivities();
         });
     }
-});
+})();
 
 function resetSearch() {
     // 모든 검색 입력 필드 초기화

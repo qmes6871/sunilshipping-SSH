@@ -199,11 +199,14 @@ include dirname(dirname(__DIR__)) . '/includes/header.php';
                 <label class="form-label">활동 유형</label>
                 <select class="form-select" name="activity_type" id="activityType" onchange="toggleActivityForms()">
                     <option value="">유형 선택</option>
-                    <option value="영업활동">영업활동</option>
+                    <option value="리드">리드</option>
+                    <option value="접촉">접촉</option>
                     <option value="제안">제안</option>
-                    <option value="거래">거래</option>
-                    <option value="니즈">니즈</option>
-                    <option value="솔루션">솔루션</option>
+                    <option value="계약">계약</option>
+                    <option value="협상">협상</option>
+                    <option value="진행">진행</option>
+                    <option value="부킹완료">부킹완료</option>
+                    <option value="정산완료">정산완료</option>
                 </select>
             </div>
         </div>

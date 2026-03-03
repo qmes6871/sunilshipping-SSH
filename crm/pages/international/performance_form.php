@@ -469,10 +469,7 @@ include dirname(dirname(__DIR__)) . '/includes/header.php';
 
             <!-- 기간 선택 탭 -->
             <div class="period-tabs">
-                <button type="button" class="period-tab <?= $periodType === 'daily' ? 'active' : '' ?>" data-period="daily">일간</button>
-                <button type="button" class="period-tab <?= $periodType === 'weekly' ? 'active' : '' ?>" data-period="weekly">주간</button>
                 <button type="button" class="period-tab <?= $periodType === 'monthly' ? 'active' : '' ?>" data-period="monthly">월간</button>
-                <button type="button" class="period-tab <?= $periodType === 'quarterly' ? 'active' : '' ?>" data-period="quarterly">분기</button>
                 <button type="button" class="period-tab <?= $periodType === 'yearly' ? 'active' : '' ?>" data-period="yearly">연간</button>
             </div>
 
@@ -494,30 +491,6 @@ include dirname(dirname(__DIR__)) . '/includes/header.php';
                             <option value="<?= $m ?>" <?= $month == $m ? 'selected' : '' ?>><?= $m ?>월</option>
                         <?php endfor; ?>
                     </select>
-                </div>
-                <div class="form-group" id="quarterGroup" style="<?= $periodType !== 'quarterly' ? 'display:none;' : '' ?>">
-                    <label class="form-label">
-                        분기<span class="required">*</span>
-                    </label>
-                    <select class="form-select" id="quarter">
-                        <option value="">분기 선택</option>
-                        <option value="1">1분기 (1-3월)</option>
-                        <option value="2">2분기 (4-6월)</option>
-                        <option value="3">3분기 (7-9월)</option>
-                        <option value="4">4분기 (10-12월)</option>
-                    </select>
-                </div>
-                <div class="form-group" id="weekGroup" style="<?= $periodType !== 'weekly' ? 'display:none;' : '' ?>">
-                    <label class="form-label">
-                        주차<span class="required">*</span>
-                    </label>
-                    <input type="number" class="form-input" id="week" placeholder="1-52" min="1" max="52">
-                </div>
-                <div class="form-group" id="dayGroup" style="<?= $periodType !== 'daily' ? 'display:none;' : '' ?>">
-                    <label class="form-label">
-                        일자<span class="required">*</span>
-                    </label>
-                    <input type="date" class="form-input" id="date" value="<?= date('Y-m-d') ?>">
                 </div>
             </div>
         </div>
@@ -578,9 +551,6 @@ document.querySelector('form').addEventListener('submit', function(e) {
 // 기간 탭 전환
 const periodTabs = document.querySelectorAll('.period-tab');
 const monthGroup = document.getElementById('monthGroup');
-const quarterGroup = document.getElementById('quarterGroup');
-const weekGroup = document.getElementById('weekGroup');
-const dayGroup = document.getElementById('dayGroup');
 const periodTypeInput = document.getElementById('periodTypeInput');
 
 periodTabs.forEach(tab => {
@@ -593,28 +563,11 @@ periodTabs.forEach(tab => {
         const period = this.dataset.period;
         periodTypeInput.value = period;
 
-        monthGroup.style.display = 'none';
-        quarterGroup.style.display = 'none';
-        weekGroup.style.display = 'none';
-        dayGroup.style.display = 'none';
-
-        switch(period) {
-            case 'daily':
-                dayGroup.style.display = 'flex';
-                break;
-            case 'weekly':
-                monthGroup.style.display = 'flex';
-                weekGroup.style.display = 'flex';
-                break;
-            case 'monthly':
-                monthGroup.style.display = 'flex';
-                break;
-            case 'quarterly':
-                quarterGroup.style.display = 'flex';
-                break;
-            case 'yearly':
-                // 연간은 년도만 필요
-                break;
+        if (period === 'monthly') {
+            monthGroup.style.display = 'flex';
+        } else {
+            // 연간은 년도만 필요
+            monthGroup.style.display = 'none';
         }
     });
 });

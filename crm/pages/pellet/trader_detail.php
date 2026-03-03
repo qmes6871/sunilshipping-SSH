@@ -1743,14 +1743,14 @@ function resetSearch() {
 }
 
 // typeFilter 변경 시 검색 실행
-document.addEventListener('DOMContentLoaded', function() {
+(function() {
     const typeFilter = document.getElementById('typeFilter');
     if (typeFilter) {
         typeFilter.addEventListener('change', function() {
             searchActivities();
         });
     }
-});
+})();
 
 // 댓글 수정 모드 진입
 function editComment(commentId) {

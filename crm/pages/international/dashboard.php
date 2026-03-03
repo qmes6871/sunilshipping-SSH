@@ -23,12 +23,12 @@ $searchExportCountry = $_GET['export_country'] ?? '';
 $page = max(1, intval($_GET['page'] ?? 1));
 $perPage = 20;
 
-// 지역 목록 (설정에서 가져오기)
-$regions = getIntlRegions();
+// 국가 목록 (설정에서 가져오기)
 $countries = getIntlCountries();
 
 // 월별 성과 데이터 조회 (개인실적 테이블에서 목표/실적 조회)
 $monthlyData = [];
+$regions = []; // DB에서 실제 사용된 region을 수집
 try {
     // 개인실적 테이블에서 지역별 목표/실적 합계 조회 (성과 차트 페이지와 동일한 로직)
     $tableCheck = $pdo->query("SHOW TABLES LIKE '" . CRM_INTL_PERSONAL_PERFORMANCE_TABLE . "'");
@@ -52,7 +52,11 @@ try {
             GROUP BY region");
         $stmt->execute([$year, $month]);
         while ($row = $stmt->fetch()) {
-            $monthlyData[$row['region']] = [
+            $region = $row['region'] ?: '미지정';
+            if (!in_array($region, $regions)) {
+                $regions[] = $region;
+            }
+            $monthlyData[$region] = [
                 'target' => intval($row['target_total']),
                 'actual' => intval($row['actual_total'])
             ];
@@ -60,6 +64,51 @@ try {
     }
 } catch (Exception $e) {
     // 오류 시 빈 배열 유지
+}
+
+// 부서실적 테이블에서도 데이터 조회하여 병합
+try {
+    $tableCheck = $pdo->query("SHOW TABLES LIKE '" . CRM_INTL_PERFORMANCE_TABLE . "'");
+    if ($tableCheck->fetch()) {
+        $columns = [];
+        $colResult = $pdo->query("SHOW COLUMNS FROM " . CRM_INTL_PERFORMANCE_TABLE);
+        while ($col = $colResult->fetch()) {
+            $columns[] = $col['Field'];
+        }
+        $yearCol = in_array('year', $columns) ? 'year' : 'period_year';
+        $monthCol = in_array('month', $columns) ? 'month' : 'period_month';
+        $countCol = in_array('performance_count', $columns) ? 'performance_count' : '0';
+        $targetCol = "GREATEST(COALESCE(target, 0), COALESCE({$countCol}, 0))";
+        $actualCol = "GREATEST(COALESCE(actual, 0), COALESCE({$countCol}, 0))";
+
+        $stmt = $pdo->prepare("SELECT region,
+            SUM({$targetCol}) as target_total,
+            SUM({$actualCol}) as actual_total
+            FROM " . CRM_INTL_PERFORMANCE_TABLE . "
+            WHERE {$yearCol} = ? AND {$monthCol} = ?
+            GROUP BY region");
+        $stmt->execute([$year, $month]);
+        while ($row = $stmt->fetch()) {
+            $region = $row['region'] ?: '미지정';
+            if (!empty($region)) {
+                if (!in_array($region, $regions)) {
+                    $regions[] = $region;
+                }
+                if (!isset($monthlyData[$region])) {
+                    $monthlyData[$region] = ['target' => 0, 'actual' => 0];
+                }
+                $monthlyData[$region]['target'] += intval($row['target_total']);
+                $monthlyData[$region]['actual'] += intval($row['actual_total']);
+            }
+        }
+    }
+} catch (Exception $e) {
+    // 오류 시 무시
+}
+
+// 데이터가 없으면 기본 지역 목록 사용
+if (empty($regions)) {
+    $regions = getIntlRegions();
 }
 
 // 바이어 검색 쿼리
@@ -378,6 +427,12 @@ include dirname(dirname(__DIR__)) . '/includes/header.php';
 
                 <!-- 막대 그래프 -->
                 <div class="bar-chart">
+                    <?php if (empty($regions) || empty($monthlyData)): ?>
+                    <div style="text-align: center; padding: 40px 20px; color: #6c757d;">
+                        <div style="font-size: 36px; margin-bottom: 12px;">📊</div>
+                        <div style="font-size: 14px;">선택한 기간에 등록된 실적이 없습니다.</div>
+                    </div>
+                    <?php else: ?>
                     <?php
                     foreach ($regions as $region):
                         $data = $monthlyData[$region] ?? ['target' => 0, 'actual' => 0];
@@ -395,6 +450,7 @@ include dirname(dirname(__DIR__)) . '/includes/header.php';
                         </div>
                     </div>
                     <?php endforeach; ?>
+                    <?php endif; ?>
                 </div>
             </div>
         </div>
