@@ -69,7 +69,7 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
         // 서버에 FCM 토큰 등록
         new Thread(() -> {
             try {
-                URL url = new URL("http://115.68.223.124/sunilshipping/crm/api/common/fcm_register.php");
+                URL url = new URL("https://sunilshipping.mycafe24.com/crm/api/common/fcm_register.php");
                 HttpURLConnection conn = (HttpURLConnection) url.openConnection();
                 conn.setRequestMethod("POST");
                 conn.setRequestProperty("Content-Type", "application/json");

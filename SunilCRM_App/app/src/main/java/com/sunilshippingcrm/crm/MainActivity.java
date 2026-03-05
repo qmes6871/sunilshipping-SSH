@@ -41,7 +41,7 @@ import java.util.Locale;
 
 public class MainActivity extends AppCompatActivity {
 
-    private static final String CRM_URL = "http://115.68.223.124/sunilshipping/crm";
+    private static final String CRM_URL = "https://sunilshipping.mycafe24.com/crm";
     private static final int FILE_CHOOSER_REQUEST_CODE = 100;
     private static final int PERMISSION_REQUEST_CODE = 101;
 
@@ -176,7 +176,7 @@ public class MainActivity extends AppCompatActivity {
                 String url = request.getUrl().toString();
 
                 // 외부 링크는 기본 브라우저로 열기
-                if (!url.contains("115.68.223.124")) {
+                if (!url.contains("sunilshipping.mycafe24.com")) {
                     Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
                     startActivity(intent);
                     return true;
