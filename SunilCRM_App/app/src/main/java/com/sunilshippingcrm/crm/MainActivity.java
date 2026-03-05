@@ -1,4 +1,4 @@
-package com.sunilshipping.crm;
+package com.sunilshippingcrm.crm;
 
 import android.Manifest;
 import android.app.Activity;

@@ -4,11 +4,11 @@ plugins {
 }
 
 android {
-    namespace 'com.sunilshipping.crm'
+    namespace 'com.sunilshippingcrm.crm'
     compileSdk 34
 
     defaultConfig {
-        applicationId "com.sunilshipping.crm"
+        applicationId "com.sunilshippingcrm.crm"
         minSdk 21
         targetSdk 34
         versionCode 2
