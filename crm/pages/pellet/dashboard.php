@@ -90,31 +90,58 @@ $offset = ($page - 1) * $perPage;
 
 // 거래처 목록 조회 (최신 댓글 포함 - 활동을 통해 조회)
 try {
-    $stmt = $pdo->prepare("SELECT t.*,
-        (SELECT COUNT(*) FROM crm_pellet_activity_comments cm
-         INNER JOIN crm_pellet_activities a ON cm.activity_id = a.id
-         WHERE a.trader_id = t.id) as comment_count,
-        (SELECT cm.content FROM crm_pellet_activity_comments cm
-         INNER JOIN crm_pellet_activities a ON cm.activity_id = a.id
-         WHERE a.trader_id = t.id
-         ORDER BY cm.created_at DESC LIMIT 1) as latest_comment,
-        (SELECT cm.created_at FROM crm_pellet_activity_comments cm
-         INNER JOIN crm_pellet_activities a ON cm.activity_id = a.id
-         WHERE a.trader_id = t.id
-         ORDER BY cm.created_at DESC LIMIT 1) as comment_date,
-        (SELECT u.name FROM crm_pellet_activity_comments cm
-         INNER JOIN crm_pellet_activities a ON cm.activity_id = a.id
-         LEFT JOIN " . CRM_USERS_TABLE . " u ON cm.created_by = u.id
-         WHERE a.trader_id = t.id
-         ORDER BY cm.created_at DESC LIMIT 1) as comment_author
-        FROM " . CRM_PELLET_TRADERS_TABLE . " t
-        WHERE {$whereClause}
-        ORDER BY t.created_at DESC
-        LIMIT {$perPage} OFFSET {$offset}");
+    // 댓글 관련 테이블 존재 여부 확인
+    $commentsTableExists = false;
+    $activitiesTableExists = false;
+    try {
+        $tableCheck = $pdo->query("SHOW TABLES LIKE 'crm_pellet_activity_comments'");
+        $commentsTableExists = $tableCheck->fetch() !== false;
+        $tableCheck = $pdo->query("SHOW TABLES LIKE 'crm_pellet_activities'");
+        $activitiesTableExists = $tableCheck->fetch() !== false;
+    } catch (Exception $e) {
+        // 테이블 체크 실패시 기본값 유지
+    }
+
+    if ($commentsTableExists && $activitiesTableExists) {
+        // 댓글 테이블이 존재하면 서브쿼리 포함
+        $stmt = $pdo->prepare("SELECT t.*,
+            (SELECT COUNT(*) FROM crm_pellet_activity_comments cm
+             INNER JOIN crm_pellet_activities a ON cm.activity_id = a.id
+             WHERE a.trader_id = t.id) as comment_count,
+            (SELECT cm.content FROM crm_pellet_activity_comments cm
+             INNER JOIN crm_pellet_activities a ON cm.activity_id = a.id
+             WHERE a.trader_id = t.id
+             ORDER BY cm.created_at DESC LIMIT 1) as latest_comment,
+            (SELECT cm.created_at FROM crm_pellet_activity_comments cm
+             INNER JOIN crm_pellet_activities a ON cm.activity_id = a.id
+             WHERE a.trader_id = t.id
+             ORDER BY cm.created_at DESC LIMIT 1) as comment_date,
+            (SELECT u.name FROM crm_pellet_activity_comments cm
+             INNER JOIN crm_pellet_activities a ON cm.activity_id = a.id
+             LEFT JOIN " . CRM_USERS_TABLE . " u ON cm.created_by = u.id
+             WHERE a.trader_id = t.id
+             ORDER BY cm.created_at DESC LIMIT 1) as comment_author
+            FROM " . CRM_PELLET_TRADERS_TABLE . " t
+            WHERE {$whereClause}
+            ORDER BY t.created_at DESC
+            LIMIT {$perPage} OFFSET {$offset}");
+    } else {
+        // 댓글 테이블이 없으면 기본 정보만 조회
+        $stmt = $pdo->prepare("SELECT t.*,
+            0 as comment_count,
+            NULL as latest_comment,
+            NULL as comment_date,
+            NULL as comment_author
+            FROM " . CRM_PELLET_TRADERS_TABLE . " t
+            WHERE {$whereClause}
+            ORDER BY t.created_at DESC
+            LIMIT {$perPage} OFFSET {$offset}");
+    }
     $stmt->execute($params);
     $traders = $stmt->fetchAll();
 } catch (Exception $e) {
     $traders = [];
+    $traderError = $e->getMessage(); // 디버깅용
 }
 
 include dirname(dirname(__DIR__)) . '/includes/header.php';
@@ -515,6 +542,9 @@ include dirname(dirname(__DIR__)) . '/includes/header.php';
             <tr>
                 <td colspan="8" style="text-align: center; padding: 40px; color: #999;">
                     등록된 거래처가 없습니다.
+                    <?php if (!empty($traderError)): ?>
+                    <br><small style="color: red;">오류: <?= h($traderError) ?></small>
+                    <?php endif; ?>
                 </td>
             </tr>
             <?php else: ?>

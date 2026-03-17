@@ -49,3 +49,9 @@
 /other
 *.tar.gz
 crm/logs/*.log
+node_modules/
+.next/
+.env
+.env.*
+dist/
+build/

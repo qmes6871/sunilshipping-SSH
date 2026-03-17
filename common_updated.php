@@ -1,0 +1,862 @@
+<?php
+/**
+ * 선일쉬핑 CRM 공통 함수
+ */
+
+/**
+ * 현재 로그인한 사용자 정보 가져오기
+ */
+function getCurrentUser() {
+    global $member;
+
+    // 그누보드 $member 변수 사용
+    if (!isset($member['mb_id']) || !$member['mb_id']) {
+        return null;
+    }
+
+    $pdo = getDB();
+    $mb_id = $member['mb_id'];
+
+    try {
+        // 그누보드 회원 + CRM 사용자 정보 조인
+        $sql = "SELECT m.mb_id, m.mb_name, m.mb_nick, m.mb_email, m.mb_level,
+                       u.id as crm_user_id, u.department, u.position, u.phone, u.profile_photo, u.memo
+                FROM " . G5_MEMBER_TABLE . " m
+                LEFT JOIN " . CRM_USERS_TABLE . " u ON m.mb_id = u.mb_id
+                WHERE m.mb_id = ?";
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([$mb_id]);
+        $user = $stmt->fetch();
+
+        // 그누보드 정보 병합
+        if ($user) {
+            $user['mb_level'] = $member['mb_level'];
+        }
+
+        return $user;
+    } catch (PDOException $e) {
+        error_log("getCurrentUser Error: " . $e->getMessage());
+        return null;
+    }
+}
+
+/**
+ * 로그인 체크
+ */
+function isLoggedIn() {
+    global $member;
+    return isset($member['mb_id']) && $member['mb_id'];
+}
+
+/**
+ * 로그인 필수 체크 (리다이렉트)
+ */
+function requireLogin() {
+    if (!isLoggedIn()) {
+        header('Location: ' . G5_URL . '/bbs/login.php?url=' . urlencode($_SERVER['REQUEST_URI']));
+        exit;
+    }
+}
+
+/**
+ * 관리자 권한 체크
+ */
+function isAdmin() {
+    $user = getCurrentUser();
+    // mb_level 2 이상이면 관리자로 인정 (기존: 10 이상)
+    return $user && ($user['mb_level'] >= 2 || $user['department'] === 'admin');
+}
+
+/**
+ * 부서별 권한 체크
+ */
+function hasDepartmentAccess($department) {
+    $user = getCurrentUser();
+    if (!$user) return false;
+    if (isAdmin()) return true;
+    return $user['department'] === $department;
+}
+
+/**
+ * XSS 방지 출력
+ */
+function h($str) {
+    return htmlspecialchars($str ?? '', ENT_QUOTES, 'UTF-8');
+}
+
+/**
+ * JSON 응답 반환
+ */
+function jsonResponse($data, $statusCode = 200) {
+    http_response_code($statusCode);
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode($data, JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+/**
+ * 성공 응답
+ */
+function successResponse($data = null, $message = '성공') {
+    jsonResponse([
+        'success' => true,
+        'message' => $message,
+        'data' => $data
+    ]);
+}
+
+/**
+ * 에러 응답
+ */
+function errorResponse($message = '오류가 발생했습니다.', $statusCode = 400) {
+    jsonResponse([
+        'success' => false,
+        'message' => $message
+    ], $statusCode);
+}
+
+/**
+ * CSRF 토큰 생성
+ */
+function generateCSRFToken() {
+    if (!isset($_SESSION['csrf_token'])) {
+        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+    }
+    return $_SESSION['csrf_token'];
+}
+
+/**
+ * CSRF 토큰 검증
+ */
+function validateCSRFToken($token) {
+    return isset($_SESSION['csrf_token']) && hash_equals($_SESSION['csrf_token'], $token);
+}
+
+/**
+ * 파일 업로드 처리
+ */
+function uploadFile($file, $uploadDir, $allowedTypes = null) {
+    if (!isset($file['tmp_name']) || empty($file['tmp_name'])) {
+        return ['success' => false, 'message' => '파일이 없습니다.'];
+    }
+
+    // 파일 크기 체크
+    if ($file['size'] > CRM_MAX_UPLOAD_SIZE) {
+        return ['success' => false, 'message' => '파일 크기가 너무 큽니다. (최대 50MB)'];
+    }
+
+    // 파일 확장자 체크
+    $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+    $mimeType = $file['type'] ?? '';
+
+    if ($allowedTypes === null) {
+        $allowedTypes = array_merge(CRM_ALLOWED_IMAGE_TYPES, CRM_ALLOWED_DOC_TYPES, CRM_ALLOWED_AUDIO_TYPES);
+    }
+
+    // MIME 타입 배열인 경우 (image/jpeg 형식) 확장자 배열로 변환
+    $isAllowed = false;
+    if (!empty($allowedTypes)) {
+        // MIME 타입인지 확인 (슬래시 포함)
+        if (strpos($allowedTypes[0], '/') !== false) {
+            // MIME 타입으로 체크
+            $isAllowed = in_array($mimeType, $allowedTypes);
+            // 또는 확장자로도 체크 (MIME 타입에서 확장자 추출)
+            if (!$isAllowed) {
+                $mimeToExt = [
+                    'image/jpeg' => ['jpg', 'jpeg'],
+                    'image/png' => ['png'],
+                    'image/gif' => ['gif'],
+                    'image/webp' => ['webp'],
+                    'application/pdf' => ['pdf'],
+                    'audio/mpeg' => ['mp3'],
+                    'audio/wav' => ['wav'],
+                    'audio/mp3' => ['mp3'],
+                    'audio/webm' => ['webm'],
+                    'audio/ogg' => ['ogg'],
+                    'audio/m4a' => ['m4a']
+                ];
+                foreach ($allowedTypes as $mime) {
+                    if (isset($mimeToExt[$mime]) && in_array($ext, $mimeToExt[$mime])) {
+                        $isAllowed = true;
+                        break;
+                    }
+                }
+            }
+        } else {
+            // 확장자로 체크
+            $isAllowed = in_array($ext, $allowedTypes);
+        }
+    } else {
+        $isAllowed = true;
+    }
+
+    if (!$isAllowed) {
+        return ['success' => false, 'message' => '허용되지 않는 파일 형식입니다.'];
+    }
+
+    // 업로드 디렉토리 확인
+    $fullUploadDir = CRM_UPLOAD_PATH . '/' . $uploadDir;
+    if (!is_dir($fullUploadDir)) {
+        mkdir($fullUploadDir, 0777, true);
+    }
+
+    // 파일명 생성 (유니크)
+    $newFileName = date('Ymd_His') . '_' . uniqid() . '.' . $ext;
+    $uploadPath = $fullUploadDir . '/' . $newFileName;
+
+    // 파일 이동
+    if (move_uploaded_file($file['tmp_name'], $uploadPath)) {
+        $filePath = $uploadDir . '/' . $newFileName;
+        return [
+            'success' => true,
+            'file_name' => $file['name'],
+            'original_name' => $file['name'],
+            'stored_name' => $newFileName,
+            'file_path' => $filePath,
+            'path' => $filePath,
+            'file_size' => $file['size'],
+            'size' => $file['size'],
+            'file_type' => $file['type']
+        ];
+    }
+
+    return ['success' => false, 'message' => '파일 업로드에 실패했습니다.'];
+}
+
+/**
+ * 파일 삭제
+ */
+function deleteFile($filePath) {
+    $fullPath = CRM_UPLOAD_PATH . '/' . $filePath;
+    if (file_exists($fullPath)) {
+        return unlink($fullPath);
+    }
+    return false;
+}
+
+/**
+ * 페이지네이션 계산
+ */
+function getPagination($totalCount, $currentPage = 1, $perPage = 20) {
+    $totalPages = max(1, ceil($totalCount / $perPage));
+    $currentPage = max(1, min($currentPage, $totalPages));
+    $offset = ($currentPage - 1) * $perPage;
+
+    return [
+        'total_count' => $totalCount,
+        'total_pages' => $totalPages,
+        'current_page' => $currentPage,
+        'per_page' => $perPage,
+        'offset' => $offset,
+        'has_prev' => $currentPage > 1,
+        'has_next' => $currentPage < $totalPages
+    ];
+}
+
+/**
+ * 날짜 포맷
+ */
+function formatDate($date, $format = 'Y-m-d') {
+    if (empty($date)) return '';
+    $timestamp = is_numeric($date) ? $date : strtotime($date);
+    return date($format, $timestamp);
+}
+
+/**
+ * 날짜/시간 포맷
+ */
+function formatDateTime($datetime, $format = 'Y-m-d H:i') {
+    return formatDate($datetime, $format);
+}
+
+/**
+ * 상대 시간 표시
+ */
+function timeAgo($datetime) {
+    $timestamp = is_numeric($datetime) ? $datetime : strtotime($datetime);
+    $diff = time() - $timestamp;
+
+    if ($diff < 60) return '방금 전';
+    if ($diff < 3600) return floor($diff / 60) . '분 전';
+    if ($diff < 86400) return floor($diff / 3600) . '시간 전';
+    if ($diff < 604800) return floor($diff / 86400) . '일 전';
+
+    return formatDate($timestamp);
+}
+
+/**
+ * 파일 크기 포맷
+ */
+function formatFileSize($bytes) {
+    $units = ['B', 'KB', 'MB', 'GB'];
+    $i = 0;
+    while ($bytes >= 1024 && $i < count($units) - 1) {
+        $bytes /= 1024;
+        $i++;
+    }
+    return round($bytes, 2) . ' ' . $units[$i];
+}
+
+/**
+ * 숫자 포맷 (천 단위 콤마)
+ */
+function formatNumber($number, $decimals = 0) {
+    return number_format($number, $decimals);
+}
+
+/**
+ * 금액 포맷
+ */
+function formatMoney($amount, $currency = 'KRW') {
+    $formatted = number_format($amount);
+    return $currency . ' ' . $formatted;
+}
+
+/**
+ * 입력값 정리
+ */
+function cleanInput($input) {
+    if (is_array($input)) {
+        return array_map('cleanInput', $input);
+    }
+    return trim(strip_tags($input));
+}
+
+/**
+ * 로그 기록
+ */
+function writeLog($message, $type = 'info') {
+    $logDir = CRM_PATH . '/logs';
+    if (!is_dir($logDir)) {
+        mkdir($logDir, 0755, true);
+    }
+
+    $logFile = $logDir . '/' . date('Y-m-d') . '.log';
+    $timestamp = date('Y-m-d H:i:s');
+    $user = getCurrentUser();
+    $userId = $user ? $user['mb_id'] : 'guest';
+
+    $logMessage = "[$timestamp] [$type] [$userId] $message" . PHP_EOL;
+    file_put_contents($logFile, $logMessage, FILE_APPEND | LOCK_EX);
+}
+
+/**
+ * 활동 로그 기록
+ */
+function logActivity($entityType, $entityId, $action, $details = null) {
+    $pdo = getDB();
+    $user = getCurrentUser();
+
+    try {
+        $sql = "INSERT INTO " . CRM_TABLE_PREFIX . "activity_logs
+                (entity_type, entity_id, action, details, user_id, created_at)
+                VALUES (?, ?, ?, ?, ?, NOW())";
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([
+            $entityType,
+            $entityId,
+            $action,
+            $details ? json_encode($details, JSON_UNESCAPED_UNICODE) : null,
+            $user ? $user['crm_user_id'] : null
+        ]);
+    } catch (PDOException $e) {
+        error_log("logActivity Error: " . $e->getMessage());
+    }
+}
+
+/**
+ * 알림 발생
+ */
+function createNotification($userId, $title, $message, $link = null) {
+    // 나중에 구현 (푸시 알림 연동)
+    writeLog("Notification to user $userId: $title - $message", 'notification');
+}
+
+/**
+ * 이메일 발송 (나중에 구현)
+ */
+function sendEmail($to, $subject, $body) {
+    // 나중에 구현
+    writeLog("Email to $to: $subject", 'email');
+    return true;
+}
+
+/**
+ * 부서명 가져오기
+ */
+function getDepartmentName($key) {
+    return CRM_DEPARTMENTS[$key] ?? $key;
+}
+
+/**
+ * 직급명 가져오기
+ */
+function getPositionName($key) {
+    return CRM_POSITIONS[$key] ?? $key;
+}
+
+/**
+ * 활동 유형 라벨 (영업 단계)
+ */
+function getActivityTypeLabel($type) {
+    $labels = [
+        // 영업 단계 (한글)
+        '리드' => '리드',
+        '접촉' => '접촉',
+        '제안' => '제안',
+        '계약' => '계약',
+        '협상' => '협상',
+        '진행' => '진행',
+        '부킹완료' => '부킹완료',
+        '정산완료' => '정산완료',
+        // 영업 단계 (영문)
+        'lead' => '리드',
+        'contact' => '접촉',
+        'proposal' => '제안',
+        'contract' => '계약',
+        'negotiation' => '협상',
+        'progress' => '진행',
+        'booking_completed' => '부킹완료',
+        'settlement_completed' => '정산완료',
+        'completed' => '정산완료',
+        // 기존 활동 유형 (호환성)
+        '영업활동' => '영업활동',
+        '미팅' => '미팅',
+        '전화' => '전화',
+        '이메일' => '이메일',
+        '매출' => '매출',
+        '거래' => '거래',
+        '니즈' => '니즈',
+        '솔루션' => '솔루션',
+        '견적' => '견적',
+        // 영문 활동 유형 (호환성)
+        'sales' => '영업활동',
+        'meeting' => '미팅',
+        'call' => '전화',
+        'phone' => '전화',
+        'email' => '이메일',
+        'sale' => '매출',
+        'transaction' => '거래',
+        'needs' => '니즈',
+        'solution' => '솔루션',
+        'visit' => '방문',
+        'inquiry' => '문의',
+        'quotation' => '견적',
+        'order' => '주문',
+        'delivery' => '배송',
+        'payment' => '결제',
+        'claim' => '클레임',
+        'support' => '지원',
+        'other' => '기타'
+    ];
+    return $labels[strtolower($type)] ?? $labels[$type] ?? $type;
+}
+
+/**
+ * 액션 타입 라벨 (CRUD 작업)
+ */
+function getActionLabel($action) {
+    $labels = [
+        'create' => '등록',
+        'read' => '조회',
+        'update' => '수정',
+        'delete' => '삭제',
+        'view' => '조회',
+        'edit' => '수정',
+        'add' => '추가',
+        'remove' => '제거',
+        'login' => '로그인',
+        'logout' => '로그아웃',
+        'contact' => '문의',
+        'search' => '검색',
+        'export' => '내보내기',
+        'import' => '가져오기',
+        'upload' => '업로드',
+        'download' => '다운로드',
+        'approve' => '승인',
+        'reject' => '반려',
+        'cancel' => '취소',
+        'complete' => '완료',
+        'submit' => '제출',
+        'save' => '저장',
+        'send' => '발송',
+        'reply' => '답글',
+        'comment' => '댓글'
+    ];
+    return $labels[strtolower($action)] ?? $action;
+}
+
+/**
+ * 우선순위 라벨
+ */
+function getPriorityLabel($priority) {
+    $labels = [
+        'high' => '높음',
+        'medium' => '보통',
+        'low' => '낮음'
+    ];
+    return $labels[$priority] ?? $priority;
+}
+
+/**
+ * 상태 라벨
+ */
+function getStatusLabel($status) {
+    $labels = [
+        'active' => '활성',
+        'inactive' => '비활성',
+        'pending' => '대기',
+        'draft' => '임시저장',
+        'scheduled' => '예약',
+        'sent' => '발송완료',
+        'failed' => '실패'
+    ];
+    return $labels[$status] ?? $status;
+}
+
+/**
+ * 슬러그 생성
+ */
+function createSlug($text) {
+    $text = preg_replace('/[^a-zA-Z0-9가-힣\s-]/', '', $text);
+    $text = preg_replace('/[\s-]+/', '-', $text);
+    return trim($text, '-');
+}
+
+/**
+ * 랜덤 문자열 생성
+ */
+function generateRandomString($length = 16) {
+    return bin2hex(random_bytes($length / 2));
+}
+
+/**
+ * 배열에서 특정 키만 추출
+ */
+function arrayOnly($array, $keys) {
+    return array_intersect_key($array, array_flip($keys));
+}
+
+/**
+ * 배열에서 특정 키 제외
+ */
+function arrayExcept($array, $keys) {
+    return array_diff_key($array, array_flip($keys));
+}
+
+/**
+ * 검색 키워드 하이라이트
+ */
+function highlightKeyword($text, $keyword) {
+    if (empty($keyword)) return h($text);
+    $pattern = '/(' . preg_quote($keyword, '/') . ')/i';
+    return preg_replace($pattern, '<mark>$1</mark>', h($text));
+}
+
+/**
+ * 설정값 가져오기
+ */
+function getSetting($key, $default = null) {
+    static $cache = [];
+
+    if (isset($cache[$key])) {
+        return $cache[$key];
+    }
+
+    $pdo = getDB();
+    try {
+        $stmt = $pdo->prepare("SELECT setting_value FROM " . CRM_SETTINGS_TABLE . " WHERE setting_key = ?");
+        $stmt->execute([$key]);
+        $result = $stmt->fetch();
+        $value = $result ? $result['setting_value'] : $default;
+        $cache[$key] = $value;
+        return $value;
+    } catch (Exception $e) {
+        return $default;
+    }
+}
+
+/**
+ * 설정값 저장하기
+ */
+function setSetting($key, $value) {
+    $pdo = getDB();
+    try {
+        $stmt = $pdo->prepare("INSERT INTO " . CRM_SETTINGS_TABLE . " (setting_key, setting_value)
+            VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)");
+        $stmt->execute([$key, $value]);
+        return true;
+    } catch (Exception $e) {
+        return false;
+    }
+}
+
+/**
+ * 국가 목록 가져오기 (국제물류용)
+ */
+function getIntlCountries() {
+    $countries = getSetting('intl_countries');
+    if ($countries) {
+        return json_decode($countries, true) ?: [];
+    }
+
+    // 기본 국가 목록
+    $defaultCountries = [
+        '우즈베키스탄', '카자흐스탄', '키르기스스탄', '타지키스탄', '투르크메니스탄',
+        '리비아', '알제리', '튀니지', '이집트', '모로코',
+        '사우디아라비아', 'UAE', '요르단', '이라크', '쿠웨이트',
+        '러시아', '독일', '프랑스', '영국', '폴란드',
+        '기타'
+    ];
+
+    // 초기 데이터 저장
+    setSetting('intl_countries', json_encode($defaultCountries, JSON_UNESCAPED_UNICODE));
+
+    return $defaultCountries;
+}
+
+/**
+ * 지역 목록 가져오기 (국제물류용 - 실적 차트용)
+ */
+function getIntlRegions() {
+    $regions = getSetting('intl_regions');
+    if ($regions) {
+        return json_decode($regions, true) ?: [];
+    }
+
+    // 기본 지역 목록
+    $defaultRegions = [
+        '쿠잔트', '알마티', '타쉬켄트', '리비아', '알제리', '튀니지', '이집트', '모로코', '기타'
+    ];
+
+    // 초기 데이터 저장
+    setSetting('intl_regions', json_encode($defaultRegions, JSON_UNESCAPED_UNICODE));
+
+    return $defaultRegions;
+}
+
+/**
+ * 전체 직원에게 푸시 알림 발송 (국제물류 활동용)
+ * @param string $title 알림 제목
+ * @param string $message 알림 내용
+ * @param string $activityType 활동 유형 (progress, booking_completed, settlement_completed)
+ * @param int|null $customerId 거래처 ID
+ * @param string|null $activityDate 활동 날짜
+ */
+function sendActivityNotificationToAll($title, $message, $activityType = null, $customerId = null, $activityDate = null) {
+    $pdo = getDB();
+    $user = getCurrentUser();
+
+    try {
+        // 푸시 알림 테이블에 저장
+        $stmt = $pdo->prepare("INSERT INTO " . CRM_PUSH_TABLE . "
+            (title, message, channel, target_audience, campaign_name, notification_type, status, target_count, success_count, created_by, created_at, sent_at)
+            VALUES (?, ?, 'app', 'all', ?, 'immediate', 'sent', 0, 0, ?, NOW(), NOW())");
+
+        $campaignName = '국제물류_활동알림_' . ($activityType ?? 'general');
+        $createdBy = $user ? $user['crm_user_id'] : 1; // 기본값 1 (시스템)
+
+        $stmt->execute([
+            $title,
+            $message,
+            $campaignName,
+            $createdBy
+        ]);
+
+        $pushId = $pdo->lastInsertId();
+
+        // 활동 로그 기록
+        writeLog("Activity notification sent: {$title} - {$message}", 'notification');
+
+        return ['success' => true, 'push_id' => $pushId, 'message' => '알림이 발송되었습니다.'];
+    } catch (PDOException $e) {
+        error_log("sendActivityNotificationToAll Error: " . $e->getMessage());
+        return ['success' => false, 'message' => '알림 발송 중 오류가 발생했습니다.'];
+    }
+}
+
+/**
+ * 국제물류 활동 알림 생성 (진행/부킹완료/정산완료)
+ * @param string $activityType 활동 유형
+ * @param string $customerName 거래처명
+ * @param string $activityDate 활동 날짜
+ */
+function createIntlActivityNotification($activityType, $customerName, $activityDate) {
+    // 알림 대상 활동 유형 확인
+    $notifyTypes = ['progress', 'booking_completed', 'settlement_completed'];
+    if (!in_array($activityType, $notifyTypes)) {
+        return ['success' => false, 'message' => '알림 대상 활동 유형이 아닙니다.'];
+    }
+
+    // 활동 유형 한글 변환
+    $typeLabels = [
+        'progress' => '진행',
+        'booking_completed' => '부킹완료',
+        'settlement_completed' => '정산완료'
+    ];
+    $typeLabel = $typeLabels[$activityType] ?? $activityType;
+
+    // 알림 메시지 생성
+    // 예시: "라브샨님 2026-02-27에 진행되었습니다."
+    $title = '국제물류 활동 알림';
+    $message = "{$customerName}님 {$activityDate}에 {$typeLabel}되었습니다.";
+
+    return sendActivityNotificationToAll($title, $message, $activityType, null, $activityDate);
+}
+
+/**
+ * FCM 푸시 알림 발송 (Firebase Cloud Messaging)
+ * @param string $title 알림 제목
+ * @param string $message 알림 내용
+ * @param string $topic 토픽 (기본: all_users)
+ * @param array $data 추가 데이터
+ * @return array 발송 결과
+ */
+function sendFCMNotification($title, $message, $topic = 'all_users', $data = []) {
+    $serviceAccountPath = CRM_PATH . '/config/firebase-service-account.json';
+
+    if (!file_exists($serviceAccountPath)) {
+        writeLog("FCM Error: Service account file not found", 'error');
+        return ['success' => false, 'message' => 'Firebase 설정 파일이 없습니다.'];
+    }
+
+    $serviceAccount = json_decode(file_get_contents($serviceAccountPath), true);
+    if (!$serviceAccount) {
+        writeLog("FCM Error: Invalid service account file", 'error');
+        return ['success' => false, 'message' => 'Firebase 설정 파일이 올바르지 않습니다.'];
+    }
+
+    try {
+        // JWT 생성
+        $header = base64UrlEncodeFCM(json_encode(['alg' => 'RS256', 'typ' => 'JWT']));
+        $now = time();
+        $payload = base64UrlEncodeFCM(json_encode([
+            'iss' => $serviceAccount['client_email'],
+            'scope' => 'https://www.googleapis.com/auth/firebase.messaging',
+            'aud' => $serviceAccount['token_uri'],
+            'iat' => $now,
+            'exp' => $now + 3600
+        ]));
+
+        $signature = '';
+        openssl_sign("$header.$payload", $signature, $serviceAccount['private_key'], 'SHA256');
+        $jwt = "$header.$payload." . base64UrlEncodeFCM($signature);
+
+        // 액세스 토큰 요청
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $serviceAccount['token_uri']);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query([
+            'grant_type' => 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+            'assertion' => $jwt
+        ]));
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+        $response = curl_exec($ch);
+        curl_close($ch);
+
+        $tokenData = json_decode($response, true);
+        if (!isset($tokenData['access_token'])) {
+            writeLog("FCM Error: Failed to get access token - " . $response, 'error');
+            return ['success' => false, 'message' => '토큰 획득 실패'];
+        }
+
+        $accessToken = $tokenData['access_token'];
+
+        // FCM 메시지 발송
+        $projectId = $serviceAccount['project_id'];
+        $fcmUrl = "https://fcm.googleapis.com/v1/projects/$projectId/messages:send";
+
+        $fcmMessage = [
+            'message' => [
+                'topic' => $topic,
+                'notification' => [
+                    'title' => $title,
+                    'body' => $message
+                ],
+                'data' => array_merge([
+                    'click_action' => 'OPEN_ACTIVITY'
+                ], $data),
+                'android' => [
+                    'priority' => 'high',
+                    'notification' => [
+                        'click_action' => 'OPEN_ACTIVITY',
+                        'sound' => 'default'
+                    ]
+                ]
+            ]
+        ];
+
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $fcmUrl);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'Authorization: Bearer ' . $accessToken,
+            'Content-Type: application/json'
+        ]);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($fcmMessage));
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($httpCode === 200) {
+            writeLog("FCM sent successfully: $title - $message", 'notification');
+            return ['success' => true, 'message' => '알림 발송 성공', 'response' => $response];
+        } else {
+            writeLog("FCM Error: HTTP $httpCode - $response", 'error');
+            return ['success' => false, 'message' => "발송 실패 (HTTP $httpCode)", 'response' => $response];
+        }
+
+    } catch (Exception $e) {
+        writeLog("FCM Exception: " . $e->getMessage(), 'error');
+        return ['success' => false, 'message' => $e->getMessage()];
+    }
+}
+
+/**
+ * Base64 URL 인코딩 (FCM용)
+ */
+function base64UrlEncodeFCM($data) {
+    return rtrim(strtr(base64_encode($data), '+/', '-_'), '=');
+}
+
+/**
+ * 국제물류 활동 FCM 알림 발송
+ * @param string $activityType 활동 유형
+ * @param string $customerName 거래처명
+ * @param string $activityDate 활동 날짜
+ * @param int|null $customerId 거래처 ID (선택)
+ */
+function sendIntlActivityFCM($activityType, $customerName, $activityDate, $customerId = null) {
+    // 활동 유형 한글 변환
+    $typeLabels = [
+        'progress' => '진행',
+        'booking_completed' => '부킹완료',
+        'settlement_completed' => '정산완료'
+    ];
+    $typeLabel = $typeLabels[$activityType] ?? $activityType;
+
+    // 알림 메시지 생성
+    $title = '국제물류 활동 알림';
+    $message = "{$customerName}님 {$activityDate}에 {$typeLabel}되었습니다.";
+
+    // 알림 클릭 시 이동할 URL
+    $notificationUrl = 'https://sunilshipping.mycafe24.com/crm/pages/international/dashboard.php';
+    if ($customerId) {
+        $notificationUrl = 'https://sunilshipping.mycafe24.com/crm/pages/international/customer_detail.php?id=' . $customerId;
+    }
+
+    // FCM 발송
+    $result = sendFCMNotification($title, $message, 'all_users', [
+        'notification_url' => $notificationUrl,
+        'activity_type' => $activityType,
+        'customer_name' => $customerName
+    ]);
+
+    // DB에도 저장
+    sendActivityNotificationToAll($title, $message, $activityType, $customerId, $activityDate);
+
+    return $result;
+}

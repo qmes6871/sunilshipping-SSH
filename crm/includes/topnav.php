@@ -54,7 +54,7 @@ $userInitial = mb_substr($userName, 0, 1);
                     <a href="<?= CRM_URL ?>/pages/common/routes.php">루트별 주의사항</a>
                     <a href="<?= CRM_URL ?>/pages/common/kms.php">KMS 게시판</a>
                     <hr>
-                    <a href="/gnuboard5/bbs/logout.php" class="logout">로그아웃</a>
+                    <a href="/sunilshipping/gnuboard5/bbs/logout.php?url=/sunilshipping/crm/" class="logout">로그아웃</a>
                 </div>
             </div>
             <?php else: ?>

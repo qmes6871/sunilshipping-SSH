@@ -703,3 +703,160 @@ function createIntlActivityNotification($activityType, $customerName, $activityD
 
     return sendActivityNotificationToAll($title, $message, $activityType, null, $activityDate);
 }
+
+/**
+ * FCM 푸시 알림 발송 (Firebase Cloud Messaging)
+ * @param string $title 알림 제목
+ * @param string $message 알림 내용
+ * @param string $topic 토픽 (기본: all_users)
+ * @param array $data 추가 데이터
+ * @return array 발송 결과
+ */
+function sendFCMNotification($title, $message, $topic = 'all_users', $data = []) {
+    $serviceAccountPath = CRM_PATH . '/config/firebase-service-account.json';
+
+    if (!file_exists($serviceAccountPath)) {
+        writeLog("FCM Error: Service account file not found", 'error');
+        return ['success' => false, 'message' => 'Firebase 설정 파일이 없습니다.'];
+    }
+
+    $serviceAccount = json_decode(file_get_contents($serviceAccountPath), true);
+    if (!$serviceAccount) {
+        writeLog("FCM Error: Invalid service account file", 'error');
+        return ['success' => false, 'message' => 'Firebase 설정 파일이 올바르지 않습니다.'];
+    }
+
+    try {
+        // JWT 생성
+        $header = base64UrlEncodeFCM(json_encode(['alg' => 'RS256', 'typ' => 'JWT']));
+        $now = time();
+        $payload = base64UrlEncodeFCM(json_encode([
+            'iss' => $serviceAccount['client_email'],
+            'scope' => 'https://www.googleapis.com/auth/firebase.messaging',
+            'aud' => $serviceAccount['token_uri'],
+            'iat' => $now,
+            'exp' => $now + 3600
+        ]));
+
+        $signature = '';
+        openssl_sign("$header.$payload", $signature, $serviceAccount['private_key'], 'SHA256');
+        $jwt = "$header.$payload." . base64UrlEncodeFCM($signature);
+
+        // 액세스 토큰 요청
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $serviceAccount['token_uri']);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query([
+            'grant_type' => 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+            'assertion' => $jwt
+        ]));
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+        $response = curl_exec($ch);
+        curl_close($ch);
+
+        $tokenData = json_decode($response, true);
+        if (!isset($tokenData['access_token'])) {
+            writeLog("FCM Error: Failed to get access token - " . $response, 'error');
+            return ['success' => false, 'message' => '토큰 획득 실패'];
+        }
+
+        $accessToken = $tokenData['access_token'];
+
+        // FCM 메시지 발송
+        $projectId = $serviceAccount['project_id'];
+        $fcmUrl = "https://fcm.googleapis.com/v1/projects/$projectId/messages:send";
+
+        $fcmMessage = [
+            'message' => [
+                'topic' => $topic,
+                'notification' => [
+                    'title' => $title,
+                    'body' => $message
+                ],
+                'data' => array_merge([
+                    'click_action' => 'OPEN_ACTIVITY'
+                ], $data),
+                'android' => [
+                    'priority' => 'high',
+                    'notification' => [
+                        'click_action' => 'OPEN_ACTIVITY',
+                        'sound' => 'default'
+                    ]
+                ]
+            ]
+        ];
+
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $fcmUrl);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'Authorization: Bearer ' . $accessToken,
+            'Content-Type: application/json'
+        ]);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($fcmMessage));
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($httpCode === 200) {
+            writeLog("FCM sent successfully: $title - $message", 'notification');
+            return ['success' => true, 'message' => '알림 발송 성공', 'response' => $response];
+        } else {
+            writeLog("FCM Error: HTTP $httpCode - $response", 'error');
+            return ['success' => false, 'message' => "발송 실패 (HTTP $httpCode)", 'response' => $response];
+        }
+
+    } catch (Exception $e) {
+        writeLog("FCM Exception: " . $e->getMessage(), 'error');
+        return ['success' => false, 'message' => $e->getMessage()];
+    }
+}
+
+/**
+ * Base64 URL 인코딩 (FCM용)
+ */
+function base64UrlEncodeFCM($data) {
+    return rtrim(strtr(base64_encode($data), '+/', '-_'), '=');
+}
+
+/**
+ * 국제물류 활동 FCM 알림 발송
+ * @param string $activityType 활동 유형
+ * @param string $customerName 거래처명
+ * @param string $activityDate 활동 날짜
+ * @param int|null $customerId 거래처 ID (선택)
+ */
+function sendIntlActivityFCM($activityType, $customerName, $activityDate, $customerId = null) {
+    // 활동 유형 한글 변환
+    $typeLabels = [
+        'progress' => '진행',
+        'booking_completed' => '부킹완료',
+        'settlement_completed' => '정산완료'
+    ];
+    $typeLabel = $typeLabels[$activityType] ?? $activityType;
+
+    // 알림 메시지 생성
+    $title = '국제물류 활동 알림';
+    $message = "{$customerName}님 {$activityDate}에 {$typeLabel}되었습니다.";
+
+    // 알림 클릭 시 이동할 URL
+    $notificationUrl = 'https://sunilshipping.mycafe24.com/crm/pages/international/dashboard.php';
+    if ($customerId) {
+        $notificationUrl = 'https://sunilshipping.mycafe24.com/crm/pages/international/customer_detail.php?id=' . $customerId;
+    }
+
+    // FCM 발송
+    $result = sendFCMNotification($title, $message, 'all_users', [
+        'notification_url' => $notificationUrl,
+        'activity_type' => $activityType,
+        'customer_name' => $customerName
+    ]);
+
+    // DB에도 저장
+    sendActivityNotificationToAll($title, $message, $activityType, $customerId, $activityDate);
+
+    return $result;
+}

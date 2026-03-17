@@ -118,7 +118,7 @@ function isActive($paths) {
 
         <!-- 로그아웃 -->
         <div class="nav-section" style="margin-top: auto; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.1);">
-            <a href="/gnuboard5/bbs/logout.php" class="nav-item">
+            <a href="/sunilshipping/gnuboard5/bbs/logout.php?url=/sunilshipping/crm/" class="nav-item">
                 <span class="nav-icon">🚪</span>
                 로그아웃
             </a>

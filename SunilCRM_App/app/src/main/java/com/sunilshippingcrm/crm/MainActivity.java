@@ -52,6 +52,8 @@ public class MainActivity extends AppCompatActivity {
 
     private ValueCallback<Uri[]> filePathCallback;
     private String cameraPhotoPath;
+    private String pendingNotificationUrl = null;
+    private boolean isInitialLoad = true;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -62,23 +64,33 @@ public class MainActivity extends AppCompatActivity {
         setupWebView();
         checkPermissions();
         initFirebase();
-        loadUrl();
 
-        // 알림에서 앱을 열었을 때 URL 처리
-        handleNotificationIntent(getIntent());
+        // 알림에서 앱을 열었을 때 URL 저장 (나중에 로그인 확인 후 이동)
+        checkNotificationIntent(getIntent());
+
+        // 항상 메인 URL부터 로드 (세션/쿠키 확인용)
+        loadUrl();
     }
 
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
-        handleNotificationIntent(intent);
-    }
-
-    private void handleNotificationIntent(Intent intent) {
+        // 앱이 이미 실행 중일 때는 바로 알림 URL로 이동 가능
         if (intent != null && intent.hasExtra("notification_url")) {
             String url = intent.getStringExtra("notification_url");
             if (url != null && !url.isEmpty()) {
+                progressBar.setVisibility(View.VISIBLE);
                 webView.loadUrl(url);
+            }
+        }
+    }
+
+    private void checkNotificationIntent(Intent intent) {
+        if (intent != null && intent.hasExtra("notification_url")) {
+            String url = intent.getStringExtra("notification_url");
+            if (url != null && !url.isEmpty()) {
+                pendingNotificationUrl = url;
+                android.util.Log.d("Notification", "Pending notification URL: " + url);
             }
         }
     }
@@ -164,10 +176,12 @@ public class MainActivity extends AppCompatActivity {
         // 위치 정보 활성화
         webSettings.setGeolocationEnabled(true);
 
-        // 쿠키 허용
+        // 쿠키 허용 및 세션 유지 강화
         CookieManager cookieManager = CookieManager.getInstance();
         cookieManager.setAcceptCookie(true);
         cookieManager.setAcceptThirdPartyCookies(webView, true);
+        // 쿠키 동기화 (앱 시작 시 저장된 쿠키 로드)
+        cookieManager.flush();
 
         // WebViewClient 설정
         webView.setWebViewClient(new WebViewClient() {
@@ -190,6 +204,28 @@ public class MainActivity extends AppCompatActivity {
                 super.onPageFinished(view, url);
                 swipeRefreshLayout.setRefreshing(false);
                 progressBar.setVisibility(View.GONE);
+
+                // 쿠키 동기화 (중요: 세션 유지를 위해)
+                CookieManager.getInstance().flush();
+
+                // 초기 로드 시 알림 URL 처리
+                if (isInitialLoad && pendingNotificationUrl != null) {
+                    isInitialLoad = false;
+
+                    // 로그인 페이지가 아니면 (이미 로그인된 상태) 알림 URL로 이동
+                    if (!url.contains("/login") && !url.contains("login.php")) {
+                        String targetUrl = pendingNotificationUrl;
+                        pendingNotificationUrl = null;
+                        android.util.Log.d("Notification", "Navigating to notification URL: " + targetUrl);
+                        progressBar.setVisibility(View.VISIBLE);
+                        view.loadUrl(targetUrl);
+                    } else {
+                        // 로그인 페이지면 pendingNotificationUrl 유지
+                        // 로그인 후 다시 이 메소드가 호출되면 알림 URL로 이동
+                        android.util.Log.d("Notification", "Login required, keeping pending URL");
+                        isInitialLoad = true; // 로그인 후 다시 체크하도록
+                    }
+                }
             }
 
             @Override
@@ -401,6 +437,8 @@ public class MainActivity extends AppCompatActivity {
     protected void onPause() {
         super.onPause();
         webView.onPause();
+        // 쿠키 저장 (앱 종료/백그라운드 시 세션 유지)
+        CookieManager.getInstance().flush();
     }
 
     @Override
